@@ -293,8 +293,6 @@ CREATE TABLE IF NOT EXISTS `tb_interface` (
   `description`   varchar(100) DEFAULT NULL,
   `kind`          varchar(26) DEFAULT NULL,
   `position`      varchar(10) DEFAULT NULL,
-  `img_index`     int(11) NOT NULL,
-  `button_action` varchar(100) DEFAULT NULL,
   `created_at`    datetime DEFAULT NULL,
   `updated_at`    datetime DEFAULT NULL,
   `deleted`       char(1) NOT NULL DEFAULT 'N',
@@ -314,6 +312,40 @@ CREATE TABLE IF NOT EXISTS `tb_interface_has_privilege` (
   KEY `tb_privilege_id` (`tb_privilege_id`),
   CONSTRAINT `tb_interface_has_privilege_ibfk_1` FOREIGN KEY (`tb_interface_id`) REFERENCES `tb_interface` (`id`),
   CONSTRAINT `tb_interface_has_privilege_ibfk_2` FOREIGN KEY (`tb_privilege_id`) REFERENCES `tb_privilege` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- setes-app Fase 1 (Fundação) — preferências do usuário e tema por
+-- institution (prompt_fase1_fundacao.md, decisões 14 e 16)
+-- ---------------------------------------------------------------------
+
+-- Preferências chave/valor por usuário (decisão 14 setes-app).
+-- Primeira preferência: 'locale' (i18n). Institution padrão NÃO entra aqui
+-- (fica local no dispositivo — decisão 15 setes-app).
+CREATE TABLE IF NOT EXISTS `tb_user_has_preference` (
+  `tb_user_id`       int(11) NOT NULL,
+  `preference_key`   varchar(50) NOT NULL,
+  `preference_value` varchar(255) DEFAULT NULL,
+  `created_at`       datetime DEFAULT NULL,
+  `updated_at`       datetime DEFAULT NULL,
+  `deleted`          char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_user_id`,`preference_key`),
+  CONSTRAINT `fk_uhp_to_user` FOREIGN KEY (`tb_user_id`) REFERENCES `tb_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tema/identidade visual por institution (decisão 16 setes-app).
+-- Herança por PK compartilhada (decisão 1 da Fase 2): id = tb_institution.id.
+-- Logomarca: arquivo em storage servido pela API (logo_path) — nunca BLOB.
+CREATE TABLE IF NOT EXISTS `tb_institution_theme` (
+  `id`              int(11) NOT NULL,
+  `primary_color`   varchar(9) DEFAULT NULL,   -- #AARRGGBB
+  `secondary_color` varchar(9) DEFAULT NULL,
+  `logo_path`       varchar(255) DEFAULT NULL, -- servido por GET /api/core/theme/logo
+  `created_at`      datetime DEFAULT NULL,
+  `updated_at`      datetime DEFAULT NULL,
+  `deleted`         char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_theme_to_institution` FOREIGN KEY (`id`) REFERENCES `tb_institution` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
