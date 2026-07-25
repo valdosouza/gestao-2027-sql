@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS `tb_entity` (
   `tb_linebusiness_id` int(11) DEFAULT NULL,
   `note`               blob DEFAULT NULL,
   `deleted`            char(1) NOT NULL DEFAULT 'N',
+  `updated_by`         int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `nick_trade` (`nick_trade`),
   KEY `name_company` (`name_company`),
@@ -98,7 +99,10 @@ CREATE TABLE IF NOT EXISTS `tb_user` (
 -- Especializações fiscais da entidade (herança por PK compartilhada — decisão 1)
 -- ---------------------------------------------------------------------
 
--- PJ (preenchida quando a UI informar Pessoa Jurídica com CNPJ válido)
+-- PJ (preenchida quando a UI informar Pessoa Jurídica com CNPJ válido).
+-- Fase 3 Rodada 4 (decisão 16, 2026-07-16): os campos FISCAIS (crt, crt_modal,
+-- ind_ie_destinatario, iss_*, send_xml_nfe_only) SAÍRAM daqui — tributação é
+-- POR RELAÇÃO COMERCIAL e vive em setes_<schema>.tb_entity_tax (fonte única).
 CREATE TABLE IF NOT EXISTS `tb_company` (
   `id`                  int(11) NOT NULL,
   `cnpj`                char(14) NOT NULL DEFAULT '0',
@@ -106,17 +110,10 @@ CREATE TABLE IF NOT EXISTS `tb_company` (
   `im`                  varchar(45) DEFAULT NULL,
   `iest`                varchar(45) DEFAULT NULL,
   `dt_foundation`       date DEFAULT NULL,
-  `crt`                 char(1) DEFAULT NULL,
-  `crt_modal`           char(1) DEFAULT NULL,
-  `ind_ie_destinatario` varchar(1) DEFAULT NULL,
   `created_at`          datetime NOT NULL,
   `updated_at`          datetime NOT NULL,
-  `iss_ind_exig`        char(2) DEFAULT NULL,
-  `iss_retencao`        char(1) DEFAULT NULL,
-  `iss_inc_fiscal`      char(1) DEFAULT NULL,
-  `iss_process_number`  varchar(50) DEFAULT NULL,
-  `send_xml_nfe_only`   char(1) DEFAULT NULL,
   `deleted`             char(1) NOT NULL DEFAULT 'N',
+  `updated_by`          int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `cnpj` (`cnpj`),
   CONSTRAINT `fk_company_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`)
@@ -135,9 +132,25 @@ CREATE TABLE IF NOT EXISTS `tb_person` (
   `created_at`       datetime DEFAULT NULL,
   `updated_at`       datetime DEFAULT NULL,
   `deleted`          char(1) NOT NULL DEFAULT 'N',
+  `updated_by`       int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `cpf` (`cpf`),
   CONSTRAINT `fk_person_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sem documento (Fase 3 Entidade Única, decisões 4 e 5): terceira via de
+-- identificação — pessoa que não fornece CPF/CNPJ. external_id = UUID v4
+-- gerado no backend (app) ou chave do legado (sincronizador, fase futura).
+CREATE TABLE IF NOT EXISTS `tb_no_doc` (
+  `id`          int(11) NOT NULL,
+  `external_id` varchar(255) NOT NULL,
+  `created_at`  datetime DEFAULT NULL,
+  `updated_at`  datetime DEFAULT NULL,
+  `deleted`     char(1) NOT NULL DEFAULT 'N',
+  `updated_by`  int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_no_doc_external` (`external_id`),
+  CONSTRAINT `fk_no_doc_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -207,6 +220,7 @@ CREATE TABLE IF NOT EXISTS `tb_address` (
   `created_at`    datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at`    datetime NOT NULL,
   `deleted`       char(1) NOT NULL DEFAULT 'N',
+  `updated_by`    int(11) DEFAULT NULL,
   PRIMARY KEY (`id`,`kind`),
   KEY `fk_country_to_address` (`tb_country_id`),
   KEY `fk_state_to_address` (`tb_state_id`),
@@ -226,6 +240,7 @@ CREATE TABLE IF NOT EXISTS `tb_phone` (
   `created_at`   datetime DEFAULT NULL,
   `updated_at`   datetime DEFAULT NULL,
   `deleted`      char(1) NOT NULL DEFAULT 'N',
+  `updated_by`   int(11) DEFAULT NULL,
   PRIMARY KEY (`id`,`kind`),
   CONSTRAINT `fk_phone_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -237,6 +252,7 @@ CREATE TABLE IF NOT EXISTS `tb_social_media` (
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   `deleted`    char(1) NOT NULL DEFAULT 'N',
+  `updated_by` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`,`kind`),
   CONSTRAINT `fk_social_media_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -290,8 +306,14 @@ CREATE TABLE IF NOT EXISTS `tb_privilege` (
 CREATE TABLE IF NOT EXISTS `tb_interface` (
   `id`            int(11) NOT NULL,
   `group_default` varchar(100) DEFAULT NULL,
+  `i18n_key`      varchar(100) DEFAULT NULL,  -- chave de tradução no app (setes-app decisão 26); NULL = mostra description
   `description`   varchar(100) DEFAULT NULL,
-  `kind`          varchar(26) DEFAULT NULL,
+  -- Framework de Configurações (decisão 13): 'T' = tela (vai a menu);
+  -- 'R' = recurso/aba vendável (NUNCA vai a menu — a tela pai consulta o
+  -- contrato tb_institution_has_interface para montar/omitir a aba).
+  -- Coluna legada varchar(26) reaproveitada: bootstrap-db.ts normaliza os
+  -- valores antigos para 'T' e aperta o tipo em bases existentes.
+  `kind`          char(1) NOT NULL DEFAULT 'T',
   `position`      varchar(10) DEFAULT NULL,
   `created_at`    datetime DEFAULT NULL,
   `updated_at`    datetime DEFAULT NULL,
@@ -313,6 +335,49 @@ CREATE TABLE IF NOT EXISTS `tb_interface_has_privilege` (
   CONSTRAINT `tb_interface_has_privilege_ibfk_1` FOREIGN KEY (`tb_interface_id`) REFERENCES `tb_interface` (`id`),
   CONSTRAINT `tb_interface_has_privilege_ibfk_2` FOREIGN KEY (`tb_privilege_id`) REFERENCES `tb_privilege` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Catálogo de CAMPOS por interface (setes-app Fase 2 campos configuráveis,
+-- decisões 4 e 12): baseline TÉCNICO do produto — required='S' = campo
+-- travado no painel do cliente. Sem reuso entre interfaces (decisão 4).
+-- Povoada por setes-api `npm run fields:gen` (interface ≠ tabela).
+-- COLLATE explícito: a FK composta de setes_<schema>.tb_institution_has_field
+-- inclui field_name — as collations precisam coincidir.
+CREATE TABLE IF NOT EXISTS `tb_interface_has_field` (
+  `tb_interface_id` int(11) NOT NULL,
+  `field_name`      varchar(100) NOT NULL,      -- nome da coluna conforme a tabela
+  `table_name`      varchar(100) DEFAULT NULL,  -- tabela de origem
+  `kind`            varchar(50) NOT NULL,       -- String | Integer | Float | Boolean | Date
+  `required`        char(1) NOT NULL DEFAULT 'N',
+  `created_at`      datetime DEFAULT NULL,
+  `updated_at`      datetime DEFAULT NULL,
+  `deleted`         char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_interface_id`,`field_name`),
+  CONSTRAINT `fk_ihf_to_interface` FOREIGN KEY (`tb_interface_id`) REFERENCES `tb_interface` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Catálogo de CONFIGURAÇÕES por interface (Framework de Configurações do
+-- Sistema, decisões 2, 4 e 6 — prompt_framework_configuracoes_sistema.md).
+-- Substituto do TB_GERAL do Delphi: nome + descrição + default de TODAS as
+-- opções visíveis ao suporte. Só PREFERÊNCIA/COMPORTAMENTO entra aqui —
+-- recurso VENDÁVEL é interface (kind 'R') gateada pelo contrato (decisão 1).
+-- Valores escolhidos ficam em setes_<schema>.tb_institution_has_config
+-- (só grava o que diverge do default). COLLATE explícito: a FK composta do
+-- schema do cliente inclui `name` — as collations precisam coincidir.
+CREATE TABLE IF NOT EXISTS `tb_interface_has_config` (
+  `tb_interface_id` int(11) NOT NULL,
+  `name`            varchar(50)  NOT NULL,             -- chave da configuração (ex-GRL_CAMPO)
+  `description`     varchar(255) NOT NULL,             -- ex-GRL_DESCRICAO — obrigatória: é o que salva o suporte
+  `kind`            varchar(50)  NOT NULL,             -- String|Integer|Float|Boolean|Date|Options (decisão 6)
+  `options`         varchar(255) DEFAULT NULL,         -- lista fechada p/ kind Options: "A=Por item;B=Por total"
+  `default_content` varchar(100) NOT NULL,             -- padrão inicial do produto
+  `scope`           char(1)      NOT NULL DEFAULT 'I', -- 'I'=só institution; 'U'=admite override por usuário (decisão 4)
+  `created_at`      datetime DEFAULT NULL,
+  `updated_at`      datetime DEFAULT NULL,
+  `deleted`         char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_interface_id`, `name`),
+  CONSTRAINT `fk_ihc_interface` FOREIGN KEY (`tb_interface_id`)
+    REFERENCES `tb_interface` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
 -- setes-app Fase 1 (Fundação) — preferências do usuário e tema por
@@ -351,6 +416,129 @@ CREATE TABLE IF NOT EXISTS `tb_institution_theme` (
 -- ---------------------------------------------------------------------
 -- Referência fiscal
 -- ---------------------------------------------------------------------
+
+-- Formas de pagamento (Valdo, 2026-07-18): catálogo COMPARTILHADO entre os
+-- clientes — o CLIENTE inicia o cadastro (existe? só vincula; não existe?
+-- cria aqui e vincula — reuso entre clientes, mesmo espírito da entidade
+-- única). O vínculo/uso por institution vive em
+-- setes_<schema>.tb_institution_has_payment_types (atributos do vínculo —
+-- migration 012: enable/app_mobile/bloqueios/parcelas/TEF/planos/uso).
+-- id MAX+1 no backend; id_nfce = código de pagamento da NF-e (2 chars,
+-- lista fiscal fixa — combobox no app; EDITÁVEL pela tela, vale p/ todos).
+-- description é imutável (chave do reuso). KEY updated_at = sync incremental.
+CREATE TABLE IF NOT EXISTS `tb_payment_types` (
+  `id`          int(11) NOT NULL,
+  `description` varchar(45) NOT NULL,
+  `id_nfce`     varchar(2) DEFAULT NULL,
+  `created_at`  datetime DEFAULT NULL,
+  `updated_at`  datetime DEFAULT NULL,
+  `deleted`     char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Catálogos de produto COMPARTILHADOS (revisão do sincronizador, decisões
+-- D5/D17/D24 — Valdo 2026-07-19): Marca/Embalagem/Medida seguem o padrão
+-- "catálogo central iniciado pelo cliente" (molde tb_payment_types acima):
+-- registro ÚNICO por DESCRIÇÃO — dedupe por UPPER(TRIM(descricao)) SEM
+-- colapsar acentos (D17; por isso SEM UNIQUE KEY na coluna: a collation
+-- unicode_ci fundiria 'AÇO' com 'ACO' — o dedupe é da aplicação, dentro da
+-- transação). Vínculo/uso por institution em setes_<schema>.
+-- tb_institution_has_{brand,package,measure} (migration 018 realinha o
+-- baseline legado). A central nasce VAZIA (D24 — sem dedupe retroativo).
+-- tb_provider_id da tb_brand legada NÃO sobe: provider é papel POR CLIENTE
+-- — catálogo compartilhado não pode referenciar papel de um cliente.
+CREATE TABLE IF NOT EXISTS `tb_brand` (
+  `id`          int(11) NOT NULL,
+  `description` varchar(100) NOT NULL,
+  `created_at`  datetime DEFAULT NULL,
+  `updated_at`  datetime DEFAULT NULL,
+  `deleted`     char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  KEY `description` (`description`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_package` (
+  `id`           int(11) NOT NULL,
+  `description`  varchar(100) NOT NULL,
+  `abbreviation` varchar(3) DEFAULT NULL,
+  `created_at`   datetime DEFAULT NULL,
+  `updated_at`   datetime DEFAULT NULL,
+  `deleted`      char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  KEY `description` (`description`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_measure` (
+  `id`           int(11) NOT NULL,
+  `description`  varchar(100) NOT NULL,
+  `abbreviation` varchar(5) DEFAULT NULL,
+  `escale`       decimal(10,2) DEFAULT NULL,
+  `created_at`   datetime DEFAULT NULL,
+  `updated_at`   datetime DEFAULT NULL,
+  `deleted`      char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  KEY `description` (`description`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- RASTRO DE ERRO TÉCNICO (Framework de Mensagens R2, Valdo 2026-07-19):
+-- tb_crashlytics REFORMADA do baseline e movida p/ a CENTRAL (suporte da
+-- Setes enxerga todos os clientes numa consulta; a local dos schemas é
+-- derrubada pela migration 017). ref = código curto exibido ao usuário no
+-- dialog de erro; code = catálogo de erros conhecidos (tb_error_catalog);
+-- message = JSON {message, stack}. ⚠️ AUTO_INCREMENT é a EXCEÇÃO
+-- documentada do padrão MAX+1 (PADROES_BANCO §4): log de erro não pode
+-- falhar por corrida de lock justamente quando algo já deu errado.
+CREATE TABLE IF NOT EXISTS `tb_crashlytics` (
+  `id`                int(11) NOT NULL AUTO_INCREMENT,
+  `tb_institution_id` int(11) NOT NULL DEFAULT 0,
+  `tb_user_id`        int(11) NOT NULL DEFAULT 0,
+  `origen`            varchar(100) NOT NULL,
+  `ref`               varchar(12) DEFAULT NULL,
+  `code`              varchar(40) DEFAULT NULL,
+  `status_code`       int(11) DEFAULT NULL,
+  `message`           blob DEFAULT NULL,
+  `created_at`        datetime DEFAULT NULL,
+  `updated_at`        datetime DEFAULT NULL,
+  `deleted`           char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ref` (`ref`),
+  KEY `code` (`code`),
+  KEY `created_at` (`created_at`),
+  KEY `idx_crash_institution` (`tb_institution_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Catálogo de ERROS CONHECIDOS (Framework de Mensagens R8): tabela de
+-- REFERÊNCIA derivada de setes-api/src/shared/errors/error-codes.ts por
+-- `npm run errors:gen` (NUNCA editada à mão — a fonte é o código, que
+-- nasce no mesmo commit do throw). Serve aos joins SQL com a crashlytics.
+CREATE TABLE IF NOT EXISTS `tb_error_catalog` (
+  `code`        varchar(40) NOT NULL,
+  `description` varchar(200) NOT NULL,
+  `created_at`  datetime DEFAULT NULL,
+  `updated_at`  datetime DEFAULT NULL,
+  `deleted`     char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Catálogo de BANCOS (DP2 do módulo Software House, Valdo 2026-07-18):
+-- referência FEBRABAN compartilhada (como tb_country) — NÃO entra na
+-- cadeia de entidade fiscal. Contas correntes e históricos de extrato
+-- ficam por schema (tb_bank_account/tb_bank_historic com FK cross-schema).
+CREATE TABLE IF NOT EXISTS `tb_bank` (
+  `id`          int(11) NOT NULL,
+  `number`      varchar(3) NOT NULL,
+  `description` varchar(100) DEFAULT NULL,
+  `created_at`  datetime DEFAULT NULL,
+  `updated_at`  datetime DEFAULT NULL,
+  `deleted`     char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `number` (`number`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `tb_cfop` (
   `id`           varchar(10) NOT NULL,
@@ -487,3 +675,30 @@ CREATE TABLE IF NOT EXISTS `tb_feature_flag` (
 
 DROP TABLE IF EXISTS `feature_flags`;
 DROP TABLE IF EXISTS `tenants`;
+
+-- ---------------------------------------------------------------------
+-- Revisao correcao de documento / graduacao do sem-doc (2026-07-25,
+-- prompt_correcao_documento_entidade.md decisao 2): fila central de
+-- conflitos de sincronizacao para ACAO MANUAL (documento ja pertence a
+-- outra entity / externalCode orfao com documento ocupado). Dedupe por
+-- UNIQUE (institution+documento+external_code); resolved='S' fecha o item.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `tb_sync_conflict` (
+  `id`                int(11) NOT NULL AUTO_INCREMENT,
+  `tb_institution_id` int(11) NOT NULL,
+  `document`          varchar(14) NOT NULL,
+  `external_code`     varchar(36) DEFAULT NULL,
+  `tb_entity_id_doc`  int(11) DEFAULT NULL,
+  `tb_entity_id_ext`  int(11) DEFAULT NULL,
+  `origin`            varchar(30) NOT NULL,
+  `message`           varchar(255) DEFAULT NULL,
+  `resolved`          char(1) NOT NULL DEFAULT 'N',
+  `created_at`        datetime DEFAULT NULL,
+  `updated_at`        datetime DEFAULT NULL,
+  `deleted`           char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sync_conflict` (`tb_institution_id`,`document`,`external_code`),
+  KEY `idx_sync_conflict_resolved` (`resolved`),
+  CONSTRAINT `fk_sync_conflict_institution` FOREIGN KEY (`tb_institution_id`) REFERENCES `tb_institution` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -4,6 +4,14 @@
 -- Remove do schema do cliente tudo o que foi CENTRALIZADO em setes_central,
 -- garantindo que as duas bases NÃO tenham as mesmas tabelas.
 --
+-- ⚠️ PARCIALMENTE SUPERADO (2026-07-15, Fase 3 Entidade Única — decisão 12):
+--   O bloco "Núcleo cadastral" abaixo foi ABSORVIDO pela migration automática
+--   005_entidade_unica.sql (setes-api/src/migrations/sql/), que também realinha
+--   as FKs de tb_customer/tb_salesman/tb_carrier para setes_central.
+--   tb_user/tb_institution locais NÃO caem lá (14+3 FKs operacionais do legado
+--   dependem delas) — caem na revisão do sync, junto com a reindexação dos ids
+--   do Firebird via cpf/cnpj/tb_no_doc.external_id.
+--
 -- ⚠️ ATENÇÃO:
 --   1. Rodar UMA VEZ POR CLIENTE, substituindo `setes_setes` pelo schema dele.
 --   2. Se o schema tiver dados legados (ex.: base Delphi migrada), migre o que
