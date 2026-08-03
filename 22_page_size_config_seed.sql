@@ -30,4 +30,4 @@ SELECT i.`id`, 'page_size',
        'cities', 'cfop', 'users', 'customers', 'collaborators', 'contracts',
        'bank-accounts', 'payment-types', 'interface-fields',
        'interface-configs', 'service-orders', 'settlements',
-       'salesmen', 'carriers');
+       'salesmen', 'carriers', 'providers');

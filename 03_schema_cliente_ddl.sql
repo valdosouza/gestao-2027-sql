@@ -277,6 +277,29 @@ CREATE TABLE IF NOT EXISTS `tb_carrier` (
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- Papel FORNECEDOR (Onda 3 da Entidade Única, D2 — 2026-08-03): estava só
+-- no baseline (fora do realinhamento da migration 005); entra no canônico
+-- alinhado aos irmãos (migration 022 realinha schemas existentes). O papel
+-- não tem campo próprio no legado (tblProvider.pas = só active).
+CREATE TABLE IF NOT EXISTS `tb_provider` (
+  `id`                INT NOT NULL,
+  `tb_institution_id` INT NOT NULL,
+  `active`            CHAR(1) NOT NULL DEFAULT 'S',
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`),
+  KEY `idx_tb_provider_institution` (`tb_institution_id`),
+  CONSTRAINT `fk_tb_provider_entity`
+    FOREIGN KEY (`id`)
+    REFERENCES `setes_central`.`tb_entity` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_tb_provider_institution`
+    FOREIGN KEY (`tb_institution_id`)
+    REFERENCES `setes_central`.`tb_institution` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- =====================================================================
 -- Fase 3 Rodada 4 (decisões 14–17): TRIBUTAÇÃO por relação comercial
 -- (entity × institution) — QUALQUER entidade pode precisar de tributação
