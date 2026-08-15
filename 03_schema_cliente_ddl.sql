@@ -366,11 +366,14 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_interface` (
 
 -- Módulos definidos pelo cliente (menu vertical do shell — decisão 18).
 -- id gerado pela aplicação (decisão 7 da Fase 2 — sem AUTO_INCREMENT).
+-- Módulo de Menus 2026-08-04 (prompt_modulo_menus.md D3/D4 + migration 023):
+-- position = ordem no menu; image_icon = NOME de ícone Material (o app
+-- renderiza pelo nome); link_name legado DROPADA.
 CREATE TABLE IF NOT EXISTS `tb_module` (
   `id`          INT NOT NULL,
   `description` VARCHAR(100) DEFAULT NULL,
-  `link_name`   VARCHAR(255) NOT NULL,
-  `image_icon`  INT DEFAULT 0,
+  `position`    INT DEFAULT NULL,
+  `image_icon`  VARCHAR(50) DEFAULT NULL,
   `created_at`  DATETIME DEFAULT NULL,
   `updated_at`  DATETIME DEFAULT NULL,
   `deleted`     CHAR(1) NOT NULL DEFAULT 'N',
@@ -379,10 +382,12 @@ CREATE TABLE IF NOT EXISTS `tb_module` (
 
 -- Detail do módulo: interfaces incluídas (Master-Detail — decisão 18).
 -- Uma interface pode estar em mais de um módulo (prompt, seção G).
+-- position (D3): a ordem do array do PUT é a ordem das telas no menu.
 CREATE TABLE IF NOT EXISTS `tb_module_has_interface` (
   `tb_module_id`    INT NOT NULL,
   `tb_interface_id` INT NOT NULL,
   `active`          CHAR(1) DEFAULT NULL,
+  `position`        INT DEFAULT NULL,
   `created_at`      DATETIME DEFAULT NULL,
   `updated_at`      DATETIME DEFAULT NULL,
   `deleted`         CHAR(1) NOT NULL DEFAULT 'N',
