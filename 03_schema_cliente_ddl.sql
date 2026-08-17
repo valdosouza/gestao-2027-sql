@@ -636,3 +636,129 @@ CREATE TABLE IF NOT EXISTS `tb_partnership` (
     REFERENCES `tb_collaborator` (`id`, `tb_institution_id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- Fase Faturamento Fiscal e Financeiro (2026-08-16) — blocos canônicos.
+-- Fonte: Infra-IA/prompts/prompt_fase_faturamento_financeiro.md (32 decisões)
+-- + parecer setes-conceito. Migration correspondente: setes-api 025/026.
+-- Regra de Tributação: SELETOR (só campos do WHERE do motor) + peças 1:1 por
+-- tributo — PRESENÇA = a regra DEFINE o tributo (isenção = presença com
+-- alíquota nula). Coringas por NULL (produto/cliente/estado/ncm). As 6
+-- sutilezas do matching vivem em @shared/tax-rule. tb_tax_ruler (baseline
+-- legado) foi APOSENTADA pela decisão 30. FKs cross-schema só em INT (nota de
+-- collation na migration 025); CSTs validados na aplicação.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule` (
+  `id`                 INT(11) NOT NULL,
+  `tb_institution_id`  INT(11) NOT NULL,
+  `tb_product_id`      INT(11) DEFAULT NULL,
+  `tb_entity_id`       INT(11) DEFAULT NULL,
+  `ncm`                VARCHAR(8) DEFAULT NULL,
+  `origin`             CHAR(1) NOT NULL,
+  `final_consumer`     CHAR(1) NOT NULL DEFAULT 'N',
+  `simples`            CHAR(1) NOT NULL DEFAULT 'N',
+  `st`                 CHAR(1) NOT NULL DEFAULT 'N',
+  `purpose`            CHAR(1) NOT NULL DEFAULT '0',
+  `direction`          CHAR(1) DEFAULT NULL,
+  `tb_cfop_id`         VARCHAR(10) DEFAULT NULL,
+  `tb_state_id`        INT(11) DEFAULT NULL,
+  `tb_observation_id`  INT(11) DEFAULT NULL,
+  `tb_taxes_id`        INT(11) DEFAULT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  KEY `idx_tax_rule_selector` (`tb_institution_id`,`origin`,`st`,`final_consumer`,`simples`,`purpose`),
+  KEY `idx_tax_rule_ncm` (`ncm`),
+  KEY `idx_tax_rule_cfop` (`tb_cfop_id`),
+  CONSTRAINT `fk_tax_rule_entity` FOREIGN KEY (`tb_entity_id`) REFERENCES `setes_central`.`tb_entity` (`id`),
+  CONSTRAINT `fk_tax_rule_state` FOREIGN KEY (`tb_state_id`) REFERENCES `setes_central`.`tb_state` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule_icms` (
+  `id`                          INT(11) NOT NULL,
+  `tb_tax_icms_nr_id`           CHAR(2) DEFAULT NULL,
+  `tb_tax_icms_sn_id`           CHAR(3) DEFAULT NULL,
+  `tb_deter_base_tax_icms_id`   CHAR(2) DEFAULT NULL,
+  `tb_discharge_icms_id`        INT(11) DEFAULT NULL,
+  `aliq`                        DECIMAL(10,2) DEFAULT NULL,
+  `aliq_reduction`              DECIMAL(10,2) DEFAULT NULL,
+  `base_reduction`              DECIMAL(10,2) DEFAULT NULL,
+  `deferred`                    CHAR(1) NOT NULL DEFAULT 'N',
+  `deferred_aliq`               DECIMAL(10,2) DEFAULT NULL,
+  `highlight`                   CHAR(1) NOT NULL DEFAULT 'N',
+  `created_at`                  DATETIME DEFAULT NULL,
+  `updated_at`                  DATETIME DEFAULT NULL,
+  `deleted`                     CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_txr_icms_rule` FOREIGN KEY (`id`) REFERENCES `tb_tax_rule` (`id`),
+  CONSTRAINT `fk_txr_icms_discharge` FOREIGN KEY (`tb_discharge_icms_id`) REFERENCES `setes_central`.`tb_discharge_icms` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule_icms_st` (
+  `id`                             INT(11) NOT NULL,
+  `tb_deter_base_tax_icms_st_id`   CHAR(2) DEFAULT NULL,
+  `propagate_base_reduction`       CHAR(1) NOT NULL DEFAULT 'N',
+  `created_at`                     DATETIME DEFAULT NULL,
+  `updated_at`                     DATETIME DEFAULT NULL,
+  `deleted`                        CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_txr_st_rule` FOREIGN KEY (`id`) REFERENCES `tb_tax_rule` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule_ipi` (
+  `id`              INT(11) NOT NULL,
+  `tb_tax_ipi_id`   CHAR(2) NOT NULL,
+  `aliq`            DECIMAL(10,2) DEFAULT NULL,
+  `created_at`      DATETIME DEFAULT NULL,
+  `updated_at`      DATETIME DEFAULT NULL,
+  `deleted`         CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_txr_ipi_rule` FOREIGN KEY (`id`) REFERENCES `tb_tax_rule` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule_pis_cofins` (
+  `id`          INT(11) NOT NULL,
+  `kind`        CHAR(1) NOT NULL,
+  `cst`         CHAR(2) NOT NULL,
+  `aliq`        DECIMAL(10,2) DEFAULT NULL,
+  `created_at`  DATETIME DEFAULT NULL,
+  `updated_at`  DATETIME DEFAULT NULL,
+  `deleted`     CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`,`kind`),
+  CONSTRAINT `fk_txr_piscofins_rule` FOREIGN KEY (`id`) REFERENCES `tb_tax_rule` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_tax_rule_ii` (
+  `id`             INT(11) NOT NULL,
+  `ii_aliq`        DECIMAL(10,2) DEFAULT NULL,
+  `irpj_aliq`      DECIMAL(10,2) DEFAULT NULL,
+  `csll_aliq`      DECIMAL(10,2) DEFAULT NULL,
+  `afrmm_aliq`     DECIMAL(10,5) DEFAULT NULL,
+  `siscomex_aliq`  DECIMAL(10,5) DEFAULT NULL,
+  `created_at`     DATETIME DEFAULT NULL,
+  `updated_at`     DATETIME DEFAULT NULL,
+  `deleted`        CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_txr_ii_rule` FOREIGN KEY (`id`) REFERENCES `tb_tax_rule` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Parcelamento ELABORADO da ordem (decisões 25/31): presença = negociação
+-- parcela a parcela; ausência = o prazo string do tb_order_billing gera as
+-- parcelas no faturamento. O financeiro só consome o materializado.
+CREATE TABLE IF NOT EXISTS `tb_order_installment` (
+  `tb_institution_id`    INT(11) NOT NULL,
+  `tb_order_id`          INT(11) NOT NULL,
+  `terminal`             INT(11) NOT NULL DEFAULT 0,
+  `parcel`               SMALLINT NOT NULL,
+  `due_date`             DATE NOT NULL,
+  `amount`               DECIMAL(15,2) NOT NULL,
+  `tb_payment_types_id`  INT(11) DEFAULT NULL,
+  `created_at`           DATETIME DEFAULT NULL,
+  `updated_at`           DATETIME DEFAULT NULL,
+  `deleted`              CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`,`tb_order_id`,`terminal`,`parcel`),
+  CONSTRAINT `fk_order_installment_order` FOREIGN KEY (`tb_order_id`,`tb_institution_id`,`terminal`) REFERENCES `tb_order` (`id`,`tb_institution_id`,`terminal`),
+  CONSTRAINT `fk_order_installment_paytype` FOREIGN KEY (`tb_payment_types_id`) REFERENCES `setes_central`.`tb_payment_types` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

@@ -426,10 +426,16 @@ CREATE TABLE IF NOT EXISTS `tb_institution_theme` (
 -- id MAX+1 no backend; id_nfce = código de pagamento da NF-e (2 chars,
 -- lista fiscal fixa — combobox no app; EDITÁVEL pela tela, vale p/ todos).
 -- description é imutável (chave do reuso). KEY updated_at = sync incremental.
+-- kind (decisões 16/26/32 da fase Faturamento/Financeiro, migration 027):
+-- comportamento de QUITAÇÃO do meio — 'E' espécie, 'X' PIX, 'Q' cheque,
+-- 'B' boleto, 'W' carteira/fiado, 'C' cartão, 'O' outros. Backfill único por
+-- mapa determinístico id_nfce→kind; depois, SÓ o kind classifica (nunca a
+-- descrição). Forma nova define kind no cadastro (sugerido pelo id_nfce).
 CREATE TABLE IF NOT EXISTS `tb_payment_types` (
   `id`          int(11) NOT NULL,
   `description` varchar(45) NOT NULL,
   `id_nfce`     varchar(2) DEFAULT NULL,
+  `kind`        char(1) NOT NULL DEFAULT 'O',
   `created_at`  datetime DEFAULT NULL,
   `updated_at`  datetime DEFAULT NULL,
   `deleted`     char(1) NOT NULL DEFAULT 'N',
