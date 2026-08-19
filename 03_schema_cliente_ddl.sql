@@ -647,6 +647,9 @@ CREATE TABLE IF NOT EXISTS `tb_partnership` (
 -- sutilezas do matching vivem em @shared/tax-rule. tb_tax_ruler (baseline
 -- legado) foi APOSENTADA pela decisão 30. FKs cross-schema só em INT (nota de
 -- collation na migration 025); CSTs validados na aplicação.
+-- Decisão 35 (2026-08-19, migration 029): `direction` OBRIGATÓRIA E/S — toda
+-- regra declara o sentido, sem coringa (paridade com NAT_SENTIDO do legado);
+-- o sentido da OPERAÇÃO vem do way da natureza (tb_cfop, sempre E/S).
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS `tb_tax_rule` (
@@ -660,7 +663,7 @@ CREATE TABLE IF NOT EXISTS `tb_tax_rule` (
   `simples`            CHAR(1) NOT NULL DEFAULT 'N',
   `st`                 CHAR(1) NOT NULL DEFAULT 'N',
   `purpose`            CHAR(1) NOT NULL DEFAULT '0',
-  `direction`          CHAR(1) DEFAULT NULL,
+  `direction`          CHAR(1) NOT NULL DEFAULT 'S',
   `tb_cfop_id`         VARCHAR(10) DEFAULT NULL,
   `tb_state_id`        INT(11) DEFAULT NULL,
   `tb_observation_id`  INT(11) DEFAULT NULL,
