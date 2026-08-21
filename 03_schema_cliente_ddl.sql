@@ -765,3 +765,80 @@ CREATE TABLE IF NOT EXISTS `tb_order_installment` (
   CONSTRAINT `fk_order_installment_order` FOREIGN KEY (`tb_order_id`,`tb_institution_id`,`terminal`) REFERENCES `tb_order` (`id`,`tb_institution_id`,`terminal`),
   CONSTRAINT `fk_order_installment_paytype` FOREIGN KEY (`tb_payment_types_id`) REFERENCES `setes_central`.`tb_payment_types` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- W2 Onda 2 (2026-08-20) — Catálogo MVA/FCP por UF×NCM.
+-- Fonte: Infra-IA/prompts/prompt_fase_faturamento_financeiro.md (Rodada 3 +
+-- desenho do Valdo) + tributacao.md P2.7/P3.1/P7.1. Dado FISCAL INTERPRETÁVEL
+-- (decisão Q22): schema do CLIENTE, sem compartilhamento entre institutions —
+-- cada contador tem sua leitura do MVA; divergência não é mediável pela Setes.
+-- Chave UF × NCM × institution (P2.7): a mesma tabela serve ICMS-ST (alíquota/
+-- MVA pela UF do DESTINATÁRIO) e ICMS próprio no Simples (alíquota NR pela UF
+-- do EMITENTE) — quem escolhe o stateId é o caller do motor, não a tabela.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `tb_state_mva_ncm` (
+  `id`                 INT(11) NOT NULL,
+  `tb_institution_id`  INT(11) NOT NULL,
+  `tb_state_id`        INT(11) NOT NULL,
+  `ncm`                VARCHAR(8) NOT NULL,
+  `internal_aliq`      DECIMAL(10,2) NOT NULL DEFAULT 0,
+  `mva_original`       DECIMAL(10,4) NOT NULL DEFAULT 0,
+  `mva_adjusted`       DECIMAL(10,4) DEFAULT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_state_mva_ncm` (`tb_institution_id`,`tb_state_id`,`ncm`),
+  CONSTRAINT `fk_state_mva_ncm_state` FOREIGN KEY (`tb_state_id`) REFERENCES `setes_central`.`tb_state` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Match do NCM: IGUALDADE EXATA (mesma fidelidade da decisão 36 do motor da
+-- regra) — sem prefixo aqui, diferente do FCP abaixo.
+
+CREATE TABLE IF NOT EXISTS `tb_state_fcp_ncm` (
+  `id`                 INT(11) NOT NULL,
+  `tb_institution_id`  INT(11) NOT NULL,
+  `tb_state_id`        INT(11) NOT NULL,
+  `ncm`                VARCHAR(8) NOT NULL,
+  `aliq`               DECIMAL(10,2) NOT NULL DEFAULT 0,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_state_fcp_ncm` (`tb_institution_id`,`tb_state_id`,`ncm`),
+  CONSTRAINT `fk_state_fcp_ncm_state` FOREIGN KEY (`tb_state_id`) REFERENCES `setes_central`.`tb_state` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Match do NCM: PREFIXO (P7.1 — "o NCM da tabela pode ser parcial; a
+-- primeira linha que casar vence"; resolver escolhe o prefixo MAIS
+-- específico, não a ordem de inserção).
+
+-- ============================================================================
+-- W2 Onda 3 (2026-08-20) — Regra de tributação POR ITEM da ordem.
+-- Port da TB_ITENS_NFL_TRIBUTACAO (P2.6b — modo RegraDireta) com papel
+-- ampliado (rodada R4): a VALIDAÇÃO do faturamento grava a regra achada
+-- (origin 'A'); a escolha manual do cliente é origin 'M' e nunca é
+-- sobrescrita. O faturamento consome a regra gravada sem rebuscar (mata a
+-- dupla checagem do legado). PK inclui kind (correção sobre o legado).
+-- Migration correspondente: setes-api 031.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `tb_order_item_tax_rule` (
+  `tb_order_id`        INT(11) NOT NULL,
+  `tb_order_item_id`   INT(11) NOT NULL,
+  `tb_institution_id`  INT(11) NOT NULL,
+  `terminal`           INT(11) NOT NULL DEFAULT 0,
+  `kind`               VARCHAR(50) NOT NULL DEFAULT 'Sale',
+  `tb_tax_rule_id`     INT(11) NOT NULL,
+  `tb_cfop_id`         VARCHAR(10) DEFAULT NULL,
+  `set_financial`      CHAR(1) NOT NULL DEFAULT 'S',
+  `origin`             CHAR(1) NOT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_order_id`,`tb_order_item_id`,`tb_institution_id`,`terminal`,`kind`),
+  KEY `idx_oitr_rule` (`tb_institution_id`,`tb_tax_rule_id`),
+  CONSTRAINT `fk_oitr_order` FOREIGN KEY (`tb_order_id`,`tb_institution_id`,`terminal`)
+    REFERENCES `tb_order` (`id`,`tb_institution_id`,`terminal`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
