@@ -842,3 +842,77 @@ CREATE TABLE IF NOT EXISTS `tb_order_item_tax_rule` (
   CONSTRAINT `fk_oitr_order` FOREIGN KEY (`tb_order_id`,`tb_institution_id`,`terminal`)
     REFERENCES `tb_order` (`id`,`tb_institution_id`,`terminal`)
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- Comissão + Devolução (2026-08-24) — rodada Q1–Q5 do Valdo + parecer
+-- setes-conceito. Comissão = lançamento IMUTÁVEL por ITEM faturado
+-- (devolução = value NEGATIVO, nunca UPDATE/DELETE); tb_order_item_return =
+-- elo item devolvido → item vendido (equiv. TB_ITENS_DEV, saldo devolvível
+-- DERIVADO); tb_order_stock_adjust_return = âncora do ajuste no pedido de
+-- venda original (vendedor DERIVADO do tb_order_sale — D3). tb_kickback do
+-- baseline foi DROPADA (mesmo conceito, nome errado — DROP autorizado).
+-- Migration correspondente: setes-api 035.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `tb_commission` (
+  `id`                 INT(11) NOT NULL,
+  `tb_institution_id`  INT(11) NOT NULL,
+  `terminal`           INT(11) NOT NULL DEFAULT 0,
+  `kind`               CHAR(1) NOT NULL DEFAULT 'F',
+  `tb_order_id`        INT(11) NOT NULL,
+  `tb_order_item_id`   INT(11) NOT NULL,
+  `tb_order_item_kind` VARCHAR(50) NOT NULL DEFAULT 'Sale',
+  `tb_customer_id`     INT(11) NOT NULL,
+  `tb_salesman_id`     INT(11) NOT NULL,
+  `base_value`         DECIMAL(10,2) NOT NULL,
+  `aliq`               DECIMAL(10,2) NOT NULL,
+  `value`              DECIMAL(10,2) NOT NULL,
+  `dt_payment`         DATE DEFAULT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`,`tb_institution_id`,`terminal`),
+  KEY `idx_commission_item` (`tb_institution_id`,`tb_order_id`,`tb_order_item_id`),
+  KEY `idx_commission_salesman` (`tb_institution_id`,`tb_salesman_id`),
+  CONSTRAINT `fk_commission_order` FOREIGN KEY (`tb_order_id`,`tb_institution_id`,`terminal`)
+    REFERENCES `tb_order` (`id`,`tb_institution_id`,`terminal`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+-- kind: 'F'aturamento | 'R'ecebimento (modo por config — Q5; só 'F' tem
+-- produtor na versão mínima).
+
+CREATE TABLE IF NOT EXISTS `tb_order_item_return` (
+  `id`                   INT(11) NOT NULL,
+  `tb_institution_id`    INT(11) NOT NULL,
+  `tb_order_id`          INT(11) NOT NULL,
+  `terminal`             INT(11) NOT NULL DEFAULT 0,
+  `kind`                 VARCHAR(50) NOT NULL DEFAULT 'Adjust',
+  `tb_order_id_ori`      INT(11) NOT NULL,
+  `tb_order_item_id_ori` INT(11) NOT NULL,
+  `terminal_ori`         INT(11) NOT NULL DEFAULT 0,
+  `kind_ori`             VARCHAR(50) NOT NULL DEFAULT 'Sale',
+  `created_at`           DATETIME DEFAULT NULL,
+  `updated_at`           DATETIME DEFAULT NULL,
+  `deleted`              CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`,`tb_institution_id`,`tb_order_id`,`terminal`,`kind`),
+  KEY `idx_item_return_ori` (`tb_institution_id`,`tb_order_id_ori`,`tb_order_item_id_ori`),
+  CONSTRAINT `fk_item_return_item` FOREIGN KEY
+    (`id`,`tb_institution_id`,`tb_order_id`,`terminal`,`kind`)
+    REFERENCES `tb_order_item` (`id`,`tb_institution_id`,`tb_order_id`,`terminal`,`kind`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+-- COLLATE general_ci: a FK composta inclui `kind` VARCHAR e precisa casar
+-- com a colação do tb_order_item do baseline (divergir = errno 150).
+
+CREATE TABLE IF NOT EXISTS `tb_order_stock_adjust_return` (
+  `id`                INT(11) NOT NULL,
+  `tb_institution_id` INT(11) NOT NULL,
+  `terminal`          INT(11) NOT NULL DEFAULT 0,
+  `tb_order_id_ori`   INT(11) NOT NULL,
+  `terminal_ori`      INT(11) NOT NULL DEFAULT 0,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`,`tb_institution_id`,`terminal`),
+  KEY `idx_adjust_return_ori` (`tb_institution_id`,`tb_order_id_ori`),
+  CONSTRAINT `fk_adjust_return_adjust` FOREIGN KEY (`id`,`tb_institution_id`,`terminal`)
+    REFERENCES `tb_order_stock_adjust` (`id`,`tb_institution_id`,`terminal`)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
