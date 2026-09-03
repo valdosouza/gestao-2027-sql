@@ -561,6 +561,23 @@ CREATE TABLE IF NOT EXISTS `tb_cfop` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `tb_service_list` (
+  `id`              varchar(10) NOT NULL,
+  `description`     varchar(255) NOT NULL,
+  `local_incidence` char(1) NOT NULL DEFAULT 'P',
+  `active`          char(1) NOT NULL DEFAULT 'S',
+  `created_at`      datetime DEFAULT NULL,
+  `updated_at`      datetime DEFAULT NULL,
+  `deleted`         char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Lista de Serviços da LC 116/2003 (+ LC 157/2016) — referência fiscal
+-- CENTRAL (fato do mundo, como tb_cfop). id = o PRÓPRIO item ('1.01').
+-- local_incidence: 'P' = município do PRESTADOR (regra geral, art. 3º) /
+-- 'E' = município da EXECUÇÃO (exceções do art. 3º — construção, limpeza,
+-- vigilância, diversões, transporte, portos...). Prompt
+-- prompt_regra_tributacao_servico.md (D10/D12, 2026-09-02).
+
 CREATE TABLE IF NOT EXISTS `tb_ncm` (
   `number`      varchar(10) NOT NULL,
   `description` varchar(150) DEFAULT NULL,
