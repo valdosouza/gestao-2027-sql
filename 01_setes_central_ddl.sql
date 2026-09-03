@@ -185,7 +185,6 @@ CREATE TABLE IF NOT EXISTS `tb_city` (
   `tb_state_id` int(11) NOT NULL,
   `ibge`        varchar(20) DEFAULT NULL,
   `name`        varchar(100) DEFAULT NULL,
-  `aliq_iss`    decimal(10,2) NOT NULL DEFAULT 0.00,
   `population`  int(11) DEFAULT 0,
   `density`     decimal(10,2) DEFAULT 0.00,
   `area`        decimal(10,2) DEFAULT 0.00,
