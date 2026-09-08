@@ -35,5 +35,5 @@ VALUES
   (16, 'max_parcels',                 'tb_institution_has_payment_types', 'Integer', 'N', NOW(), NOW(), 'N'),
   (16, 'tef',                         'tb_institution_has_payment_types', 'Boolean', 'N', NOW(), NOW(), 'N'),
   (16, 'tb_financial_plans_id_cre',   'tb_institution_has_payment_types', 'Integer', 'N', NOW(), NOW(), 'N'),
-  (16, 'tb_financial_plans_id_deb',   'tb_institution_has_payment_types', 'Integer', 'N', NOW(), NOW(), 'N'),
-  (16, 'usage_preference',            'tb_institution_has_payment_types', 'String',  'N', NOW(), NOW(), 'N');
+  (16, 'tb_financial_plans_id_deb',   'tb_institution_has_payment_types', 'Integer', 'N', NOW(), NOW(), 'N');
+-- usage_preference APOSENTADA (migration 038 / seed 46 — D17 do contrato financeiro)

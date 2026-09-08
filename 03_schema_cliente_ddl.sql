@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS `tb_customer` (
 -- não exclui a linha compartilhada — desabilita por um tempo), app_mobile,
 -- bloqueios por situação do cliente, parcelas, TEF, Plano de Contas
 -- (Resultado/Centro de Custo — referência por coluna SEM FK física,
--- DEFAULT 0 = não definido) e preferência de uso 'C'aixa/'B'anco/'A'mbos.
+-- DEFAULT 0 = não definido). A antiga usage_preference ('C'/'B'/'A') foi
+-- APOSENTADA em 2026-09-03 (migration 038, D17 do contrato financeiro): o
+-- destino caixa × banco vem do tb_financial_contract.
 CREATE TABLE IF NOT EXISTS `tb_institution_has_payment_types` (
   `tb_institution_id`           INT NOT NULL,
   `tb_payment_types_id`         INT NOT NULL,
@@ -83,7 +85,6 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_payment_types` (
   `tef`                         CHAR(1) NOT NULL DEFAULT 'N',
   `tb_financial_plans_id_cre`   INT NOT NULL DEFAULT 0,
   `tb_financial_plans_id_deb`   INT NOT NULL DEFAULT 0,
-  `usage_preference`            CHAR(1) NOT NULL DEFAULT 'A',
   `created_at`          DATETIME DEFAULT NULL,
   `updated_at`          DATETIME DEFAULT NULL,
   `deleted`             CHAR(1) NOT NULL DEFAULT 'N',
@@ -99,6 +100,175 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_payment_types` (
     REFERENCES `setes_central`.`tb_payment_types` (`id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- CONTRATO FINANCEIRO (Valdo, 2026-09-03 — migration 038;
+-- prompt_contrato_financeiro_baixa_automatica.md D1–D22): POLÍTICA de
+-- baixa automática da forma de pagamento — especialização do vínculo
+-- acima (PK compartilhada = 1 contrato por forma, D2). A PRESENÇA do
+-- contrato é o único gatilho da baixa no faturamento (D1/D9); sem contrato
+-- o título nasce aberto. tb_bank_account_id 0 = caixa (exige caixa aberto)
+-- / > 0 = conta corrente (sentinela sem FK física, como no statement);
+-- fee_rate = taxa da operadora (débito no mesmo settled_code); payment_term
+-- = dias até o dinheiro cair (dt_record = faturamento + prazo × parcela,
+-- D12); expiration_date informativa (vencido = avisa e gera aberto, D11).
+CREATE TABLE IF NOT EXISTS `tb_financial_contract` (
+  `tb_institution_id`   INT NOT NULL,
+  `tb_payment_types_id` INT NOT NULL,
+  `tb_bank_account_id`  INT NOT NULL DEFAULT 0,
+  `fee_rate`            DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  `payment_term`        INT NOT NULL DEFAULT 0,
+  `expiration_date`     DATE DEFAULT NULL,
+  `note`                TEXT DEFAULT NULL,
+  `created_at`          DATETIME DEFAULT NULL,
+  `updated_at`          DATETIME DEFAULT NULL,
+  `deleted`             CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_payment_types_id`),
+  CONSTRAINT `fk_fc_payment_type_link`
+    FOREIGN KEY (`tb_institution_id`, `tb_payment_types_id`)
+    REFERENCES `tb_institution_has_payment_types` (`tb_institution_id`, `tb_payment_types_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- BOLETO EMITIDO (Valdo, 2026-09-03 — migration 039; prompt_boleto_emitido.md
+-- D1–D11): instrumento de cobrança de 1..N títulos. Família tb_bank_charge_*
+-- (baseline 001) relida: tb_bank_charge_slip RENOMEADA tb_bank_charge_agreement
+-- (= contratação/carteira configurada; + active D8, + our_number_next D3),
+-- tb_bank_charge_ticket = carteira bancária, tb_bank_charge_kind = espécie
+-- do documento. Cabeçalho IMUTÁVEL (taxas congeladas da config) + vínculo
+-- boleto↔título SEM FK ao título (decisão 33) + eventos append-only
+-- (E emitido, L liquidado, C cancelado, X estornado; S/G/A = canal, fora).
+CREATE TABLE IF NOT EXISTS `tb_bank_slip` (
+  `id`                          INT NOT NULL,
+  `tb_institution_id`           INT NOT NULL,
+  `tb_bank_charge_agreement_id` INT NOT NULL,
+  `tb_bank_account_id`          INT NOT NULL,
+  `tb_bank_charge_kind_id`      INT DEFAULT NULL,
+  `our_number`                  VARCHAR(30) NOT NULL,
+  `document_number`             VARCHAR(30) NOT NULL,
+  `dt_emission`                 DATE NOT NULL,
+  `dt_expiration`               DATE NOT NULL,
+  `value`                       DECIMAL(10,2) NOT NULL,
+  `accept`                      CHAR(1) DEFAULT NULL,
+  `aliq_discount`               DECIMAL(10,2) DEFAULT NULL,
+  `discount_value`              DECIMAL(10,2) DEFAULT NULL,
+  `dt_discount_until`           DATE DEFAULT NULL,
+  `aliq_interest`               DECIMAL(10,2) DEFAULT NULL,
+  `aliq_late`                   DECIMAL(10,2) DEFAULT NULL,
+  `value_late_min`              DECIMAL(10,2) DEFAULT NULL,
+  `aliq_fine`                   DECIMAL(10,2) DEFAULT NULL,
+  `value_fine`                  DECIMAL(10,2) DEFAULT NULL,
+  `value_rate`                  DECIMAL(10,2) DEFAULT NULL,
+  `instruction`                 TEXT DEFAULT NULL,
+  `protest_days`                INT DEFAULT NULL,
+  `protest_day_kind`            CHAR(1) DEFAULT NULL,
+  `negativation_days`           INT DEFAULT NULL,
+  `tb_user_id`                  INT DEFAULT NULL,
+  `created_at`                  DATETIME DEFAULT NULL,
+  `updated_at`                  DATETIME DEFAULT NULL,
+  `deleted`                     CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`),
+  KEY `idx_bank_slip_our_number` (`tb_institution_id`, `our_number`),
+  KEY `idx_bank_slip_expiration` (`tb_institution_id`, `dt_expiration`),
+  CONSTRAINT `fk_bank_slip_agreement`
+    FOREIGN KEY (`tb_bank_charge_agreement_id`, `tb_institution_id`)
+    REFERENCES `tb_bank_charge_agreement` (`id`, `tb_institution_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_bank_slip_title` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_bank_slip_id`   INT NOT NULL,
+  `tb_order_id`       INT NOT NULL,
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `parcel`            INT NOT NULL,
+  `value`             DECIMAL(10,2) NOT NULL,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_bank_slip_id`, `tb_order_id`, `terminal`, `parcel`),
+  KEY `idx_bank_slip_title_title` (`tb_institution_id`, `tb_order_id`, `terminal`, `parcel`),
+  CONSTRAINT `fk_bank_slip_title_slip`
+    FOREIGN KEY (`tb_bank_slip_id`, `tb_institution_id`)
+    REFERENCES `tb_bank_slip` (`id`, `tb_institution_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_bank_slip_event` (
+  `tb_institution_id`  INT NOT NULL,
+  `tb_bank_slip_id`    INT NOT NULL,
+  `event`              INT NOT NULL,
+  `kind`               CHAR(1) NOT NULL,
+  `dt_record`          DATE NOT NULL,
+  `source`             CHAR(1) NOT NULL DEFAULT 'M',
+  `settled_code`       INT DEFAULT NULL,
+  `tb_bank_account_id` INT DEFAULT NULL,
+  `paid_value`         DECIMAL(10,2) DEFAULT NULL,
+  `dt_expiration`      DATE DEFAULT NULL,
+  `bank_code`          VARCHAR(10) DEFAULT NULL,
+  `bank_message`       VARCHAR(100) DEFAULT NULL,
+  `origin_event`       INT DEFAULT NULL,
+  `note`               VARCHAR(255) DEFAULT NULL,
+  `tb_user_id`         INT DEFAULT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_bank_slip_id`, `event`),
+  CONSTRAINT `fk_bank_slip_event_slip`
+    FOREIGN KEY (`tb_bank_slip_id`, `tb_institution_id`)
+    REFERENCES `tb_bank_slip` (`id`, `tb_institution_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+-- CHEQUE (Valdo, 2026-09-03 — migration 040; prompt_cheque_rastreabilidade.md
+-- D1–D10 + D7a–c): título ao PORTADOR que substitui a dívida do cliente a
+-- partir da baixa do faturamento (evento R). Cabeçalho IMUTÁVEL + história
+-- append-only (R recebido · B depositado · D descontado · P usado em
+-- pagamento · T retornado com reembolso · F retornado bom · V devolvido ·
+-- X estornado). D5: UNIQUE identidade — cheque que volta é o MESMO registro.
+CREATE TABLE IF NOT EXISTS `tb_check` (
+  `id`                 INT NOT NULL,
+  `tb_institution_id`  INT NOT NULL,
+  `tb_bank_id`         INT NOT NULL,
+  `agency`             VARCHAR(10) NOT NULL,
+  `account`            VARCHAR(15) NOT NULL,
+  `number`             VARCHAR(20) NOT NULL,
+  `issuer`             VARCHAR(100) NOT NULL,
+  `value`              DECIMAL(10,2) NOT NULL,
+  `dt_check`           DATE NOT NULL,
+  `kind`               CHAR(1) NOT NULL DEFAULT 'P',
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`),
+  UNIQUE KEY `uq_check_identity` (`tb_institution_id`, `tb_bank_id`, `agency`, `account`, `number`),
+  KEY `idx_check_inst_id` (`tb_institution_id`, `id`) -- contador MAX+1 por institution (migration 041, Q-G5)
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `tb_check_event` (
+  `tb_institution_id`  INT NOT NULL,
+  `tb_check_id`        INT NOT NULL,
+  `event`              INT NOT NULL,
+  `kind`               CHAR(1) NOT NULL,
+  `dt_record`          DATE NOT NULL,
+  `tb_entity_id`       INT DEFAULT NULL,
+  `settled_code`       INT DEFAULT NULL,
+  `payment_event`      INT DEFAULT NULL,
+  `tb_order_id`        INT DEFAULT NULL,
+  `terminal`           INT DEFAULT NULL,
+  `parcel`             INT DEFAULT NULL,
+  `tb_bank_account_id` INT DEFAULT NULL,
+  `origin_event`       INT DEFAULT NULL,
+  `note`               VARCHAR(255) DEFAULT NULL,
+  `tb_user_id`         INT DEFAULT NULL,
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_check_id`, `event`),
+  CONSTRAINT `fk_check_event_check`
+    FOREIGN KEY (`tb_check_id`, `tb_institution_id`)
+    REFERENCES `tb_check` (`id`, `tb_institution_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
 -- VÍNCULO/uso de Marca/Embalagem/Medida (revisão do sincronizador, D5/D17 —
 -- Valdo 2026-07-19; migration 018 realinha o baseline): catálogos CENTRAIS
