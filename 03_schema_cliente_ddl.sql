@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS `tb_bank_slip` (
   PRIMARY KEY (`id`, `tb_institution_id`),
   KEY `idx_bank_slip_our_number` (`tb_institution_id`, `our_number`),
   KEY `idx_bank_slip_expiration` (`tb_institution_id`, `dt_expiration`),
+  KEY `idx_bank_slip_counter` (`tb_institution_id`, `id`), -- MAX+1 pelo índice (migration 048, Q-G25)
   CONSTRAINT `fk_bank_slip_agreement`
     FOREIGN KEY (`tb_bank_charge_agreement_id`, `tb_institution_id`)
     REFERENCES `tb_bank_charge_agreement` (`id`, `tb_institution_id`)
@@ -264,11 +265,63 @@ CREATE TABLE IF NOT EXISTS `tb_check_event` (
   `updated_at`         DATETIME DEFAULT NULL,
   `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`tb_institution_id`, `tb_check_id`, `event`),
+  KEY `idx_check_event_order` (`tb_institution_id`, `tb_order_id`), -- plano do cancelamento / guarda de Baixas (migration 044, Q-G8)
+  KEY `idx_check_event_code` (`tb_institution_id`, `settled_code`),  -- irmãos do grupo de recebimento
   CONSTRAINT `fk_check_event_check`
     FOREIGN KEY (`tb_check_id`, `tb_institution_id`)
     REFERENCES `tb_check` (`id`, `tb_institution_id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+-- ---------------------------------------------------------------------
+-- História da NOTA FISCAL (migration 042 — prompt_cancelamento_nota.md
+-- D3/D4/D5/D17 + parecer setes-conceito, 2026-09-08): a nota é um documento
+-- com história; estado DERIVADO do último evento. E emitida (nasce no
+-- faturamento, peça @shared/invoice) · C cancelada (motivo; origin_event =
+-- o E desfeito) · reservados T A R D I (transmissão SEFAZ) — nunca 'X'.
+-- Snapshot do fato no E: com D3 (pendente cancelada = soft-delete) + D5
+-- (pedido refaturável) o cabeçalho tb_invoice é revivido e sobrescrito.
+-- ---------------------------------------------------------------------
+-- tb_order_sale (baseline 001) — acréscimo por migration (idempotente):
+--   048: KEY idx_order_sale_number (tb_institution_id, number) — MAX+1 do nº da venda pelo
+--        índice, cunhado sob o lock da institution (regra 7 do PADROES_BANCO §9; Q-G25).
+ALTER TABLE `tb_order_sale`
+  ADD KEY IF NOT EXISTS `idx_order_sale_number` (`tb_institution_id`, `number`);
+
+-- tb_invoice (baseline 001) — acréscimos por migration (idempotentes):
+--   045: `number_seq` INT UNSIGNED GERADA (number numérico; não numérico → 0) + KEY
+--        idx_invoice_number_seq (tb_institution_id, model, serie, deleted, number_seq) —
+--        MAX+1 por modelo/série pelo índice (Q-G4 do cancelamento de nota, 2026-09-09).
+ALTER TABLE `tb_invoice`
+  ADD COLUMN IF NOT EXISTS `number_seq` INT UNSIGNED
+    AS (IF(`number` REGEXP '^[0-9]{1,9}$', CAST(`number` AS UNSIGNED), 0)) STORED
+    COMMENT 'number como inteiro (coluna gerada) — MAX+1 por modelo/série pelo índice (migration 045)';
+ALTER TABLE `tb_invoice`
+  ADD KEY IF NOT EXISTS `idx_invoice_number_seq` (`tb_institution_id`, `model`, `serie`, `deleted`, `number_seq`);
+
+CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_invoice_id`     INT NOT NULL COMMENT 'tb_invoice.id (= id do pedido)',
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `event`             INT NOT NULL,
+  `kind`              CHAR(1) NOT NULL COMMENT 'E emitida · C cancelada · reservados T A R D I',
+  `dt_record`         DATE NOT NULL,
+  `number`            VARCHAR(20) DEFAULT NULL COMMENT 'Snapshot do fato (E)',
+  `serie`             VARCHAR(10) DEFAULT NULL,
+  `model`             VARCHAR(2) DEFAULT NULL,
+  `value`             DECIMAL(10,2) DEFAULT NULL,
+  `origin_event`      INT DEFAULT NULL COMMENT 'C: o E desfeito',
+  `note`              VARCHAR(255) DEFAULT NULL COMMENT 'C: motivo (obrigatório na peça)',
+  `tb_user_id`        INT DEFAULT NULL COMMENT 'NULL = retroativo (autor desconhecido)',
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `event`),
+  CONSTRAINT `fk_invoice_event_invoice`
+    FOREIGN KEY (`tb_invoice_id`, `tb_institution_id`, `terminal`)
+    REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- VÍNCULO/uso de Marca/Embalagem/Medida (revisão do sincronizador, D5/D17 —
 -- Valdo 2026-07-19; migration 018 realinha o baseline): catálogos CENTRAIS
@@ -705,10 +758,13 @@ CREATE TABLE IF NOT EXISTS `tb_contract_item` (
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- Ramo de SERVIÇO do backbone tb_order (ciclo mensal). DP7: o status A/F
--- vive na tb_order (backbone dono do ciclo); open_lock é coluna NORMAL
--- mantida pela APLICAÇÃO na mesma transação (abrir = CONCAT(inst,'-',
--- cliente); faturar/cancelar = NULL) — a UNIQUE é a rede da D5.
+-- Ramo de SERVIÇO do backbone tb_order — NATUREZA por PRESENÇA (venda com
+-- item de serviço, pedido sincronizado, ordem de serviço): tomador do
+-- serviço. `number` = nº de ORIGEM (só o sync grava; web = NULL, como nos
+-- ramos irmãos). O CICLO da Ordem de Serviço (trava D5, nº da OS) vive em
+-- `tb_service_order` (migration 047 — parecer setes-conceito 2026-09-09).
+-- `open_lock` aqui é LEGADO: o setes-sync ainda a grava (NULL) — a coluna
+-- morre quando o sync parar (Q-C4); a UNIQUE da trava já saiu.
 CREATE TABLE IF NOT EXISTS `tb_order_service` (
   `id`                INT NOT NULL,
   `tb_institution_id` INT NOT NULL,
@@ -720,7 +776,6 @@ CREATE TABLE IF NOT EXISTS `tb_order_service` (
   `updated_at`        DATETIME NOT NULL,
   `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`id`, `tb_institution_id`, `terminal`),
-  UNIQUE KEY `uk_open_per_customer` (`open_lock`),
   KEY `idx_service_customer` (`tb_institution_id`, `tb_customer_id`),
   KEY `updated_at` (`updated_at`),
   CONSTRAINT `fk_tb_order_service_order`
@@ -730,6 +785,33 @@ CREATE TABLE IF NOT EXISTS `tb_order_service` (
   CONSTRAINT `fk_tb_order_service_customer`
     FOREIGN KEY (`tb_customer_id`)
     REFERENCES `setes_central`.`tb_entity` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- CICLO da Ordem de Serviço do Software House — peça de PROCESSO por ATO
+-- (abrir → itens/rotina mensal → faturar → cancelar a nota reabre), único
+-- produtor = módulo service-orders (o sync NUNCA grava aqui). Herança em
+-- dois níveis Order → OrderService → ServiceOrder (FK). DP7: status A/F na
+-- tb_order; `open_lock` mantida pela APLICAÇÃO na mesma transação (abrir =
+-- CONCAT(inst,'-',cliente); faturar/cancelar = NULL; cancelar a nota
+-- devolve) — a UNIQUE é a rede da D5 (1 OS aberta por cliente).
+-- migration 047 (2026-09-09).
+CREATE TABLE IF NOT EXISTS `tb_service_order` (
+  `id`                INT NOT NULL,
+  `tb_institution_id` INT NOT NULL,
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `number`            INT NOT NULL COMMENT 'nº da OS (MAX+1 por institution)',
+  `open_lock`         VARCHAR(30) DEFAULT NULL COMMENT 'trava D5 "<inst>-<cliente>"; NULL = faturada/cancelada',
+  `created_at`        DATETIME NOT NULL,
+  `updated_at`        DATETIME NOT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`, `terminal`),
+  UNIQUE KEY `uk_service_order_open`   (`open_lock`),
+  UNIQUE KEY `uk_service_order_number` (`tb_institution_id`, `number`),
+  KEY `updated_at` (`updated_at`),
+  CONSTRAINT `fk_tb_service_order_service`
+    FOREIGN KEY (`id`, `tb_institution_id`, `terminal`)
+    REFERENCES `tb_order_service` (`id`, `tb_institution_id`, `terminal`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
