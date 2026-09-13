@@ -282,6 +282,21 @@ CREATE TABLE IF NOT EXISTS `tb_check_event` (
 -- Snapshot do fato no E: com D3 (pendente cancelada = soft-delete) + D5
 -- (pedido refaturável) o cabeçalho tb_invoice é revivido e sobrescrito.
 -- ---------------------------------------------------------------------
+-- tb_order_stock_adjust (baseline 001) — acréscimo por migration (idempotente):
+--   049: KEY idx_stock_adjust_number (tb_institution_id, number) — MAX+1 do nº do ajuste/devolução
+--        pelo índice, cunhado sob o lock da institution (regra 7; A1 do re-score final).
+ALTER TABLE `tb_order_stock_adjust`
+  ADD KEY IF NOT EXISTS `idx_stock_adjust_number` (`tb_institution_id`, `number`);
+
+-- tb_financial_payment (baseline 001 + 013/014) — acréscimo por migration (idempotente):
+--   050: discount_value DECIMAL(10,2) — desconto concedido NESTA baixa em R$ (D-G28: % sobre o
+--        SALDO EM ABERTO no ato, regra BX-10 do legado; nunca sobre o tag — empilhava em parciais).
+--        Saldo em aberto = tag − Σ(pago − juros − multa + discount_value) das baixas vivas.
+ALTER TABLE `tb_financial_payment`
+  ADD COLUMN IF NOT EXISTS `discount_value` DECIMAL(10,2) NOT NULL DEFAULT 0.00
+    COMMENT 'Desconto concedido NESTA baixa (R$) = saldo em aberto no ato x discount_aliquot (D-G28)'
+    AFTER `discount_aliquot`;
+
 -- tb_order_sale (baseline 001) — acréscimo por migration (idempotente):
 --   048: KEY idx_order_sale_number (tb_institution_id, number) — MAX+1 do nº da venda pelo
 --        índice, cunhado sob o lock da institution (regra 7 do PADROES_BANCO §9; Q-G25).
@@ -755,6 +770,29 @@ CREATE TABLE IF NOT EXISTS `tb_contract_item` (
   CONSTRAINT `fk_tb_contract_item_contract`
     FOREIGN KEY (`tb_contract_id`, `tb_institution_id`)
     REFERENCES `tb_contract` (`id`, `tb_institution_id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Fato da rotina mensal (migration 051 — D-A29 do cancelamento de nota): contrato
+-- × produto × COMPETÊNCIA (YYYY-MM) → item da OS. Idempotência da rotina pela
+-- competência gravada no ato (não por created_at — reexecução retroativa injetava
+-- em dobro). OS cancelada devolve a competência (deleted='S'); a rotina revive.
+CREATE TABLE IF NOT EXISTS `tb_contract_item_competence` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_contract_id`    INT NOT NULL,
+  `tb_product_id`     INT NOT NULL,
+  `competence`        CHAR(7) NOT NULL COMMENT 'YYYY-MM',
+  `tb_order_id`       INT NOT NULL,
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `tb_order_item_id`  INT NOT NULL,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_contract_id`, `tb_product_id`, `competence`),
+  KEY `idx_contract_competence_order` (`tb_institution_id`, `tb_order_id`, `terminal`),
+  CONSTRAINT `fk_contract_item_competence_item`
+    FOREIGN KEY (`tb_contract_id`, `tb_institution_id`, `tb_product_id`)
+    REFERENCES `tb_contract_item` (`tb_contract_id`, `tb_institution_id`, `tb_product_id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
