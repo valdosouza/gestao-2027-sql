@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Seed 47: catálogo de campos configuráveis (tb_interface_has_field) da
--- interface 'financial-contracts' (Contratos Financeiros — migration 038,
+-- interface 'settlement-rules' (Regras de Recebimento — migration 038,
 -- prompt_contrato_financeiro_baixa_automatica.md D1–D22).
 -- Gerado por setes-api/scripts/gerar-interface-fields.ts (2026-09-04) e
 -- REVISADO: id da interface DINÂMICO (por i18n_key — lição do seed 40),
@@ -12,7 +12,7 @@ USE `setes_central`;
 
 INSERT IGNORE INTO `tb_interface_has_field`
   (`tb_interface_id`, `field_name`, `table_name`, `kind`, `required`, `created_at`, `updated_at`, `deleted`)
-SELECT i.`id`, f.`field_name`, 'tb_financial_contract', f.`kind`, f.`required`, NOW(), NOW(), 'N'
+SELECT i.`id`, f.`field_name`, 'tb_settlement_rule', f.`kind`, f.`required`, NOW(), NOW(), 'N'
   FROM `tb_interface` i
   JOIN (
         SELECT 'tb_payment_types_id' AS field_name, 'Integer' AS kind, 'S' AS required
@@ -22,4 +22,4 @@ SELECT i.`id`, f.`field_name`, 'tb_financial_contract', f.`kind`, f.`required`, 
         UNION ALL SELECT 'expiration_date',    'Date',    'N'
         UNION ALL SELECT 'note',               'String',  'N'
        ) f
- WHERE i.`i18n_key` = 'financial-contracts' AND i.`deleted` = 'N';
+ WHERE i.`i18n_key` = 'settlement-rules' AND i.`deleted` = 'N';

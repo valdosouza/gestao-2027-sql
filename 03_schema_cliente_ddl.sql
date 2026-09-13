@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS `tb_customer` (
 -- (Resultado/Centro de Custo — referência por coluna SEM FK física,
 -- DEFAULT 0 = não definido). A antiga usage_preference ('C'/'B'/'A') foi
 -- APOSENTADA em 2026-09-03 (migration 038, D17 do contrato financeiro): o
--- destino caixa × banco vem do tb_financial_contract.
+-- destino caixa × banco vem do tb_settlement_rule.
 CREATE TABLE IF NOT EXISTS `tb_institution_has_payment_types` (
   `tb_institution_id`           INT NOT NULL,
   `tb_payment_types_id`         INT NOT NULL,
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_payment_types` (
 -- fee_rate = taxa da operadora (débito no mesmo settled_code); payment_term
 -- = dias até o dinheiro cair (dt_record = faturamento + prazo × parcela,
 -- D12); expiration_date informativa (vencido = avisa e gera aberto, D11).
-CREATE TABLE IF NOT EXISTS `tb_financial_contract` (
+CREATE TABLE IF NOT EXISTS `tb_settlement_rule` (
   `tb_institution_id`   INT NOT NULL,
   `tb_payment_types_id` INT NOT NULL,
   `tb_bank_account_id`  INT NOT NULL DEFAULT 0,
@@ -739,6 +739,10 @@ CREATE TABLE IF NOT EXISTS `tb_contract` (
   `dt_start`          DATE NOT NULL,
   `dt_end`            DATE DEFAULT NULL,
   `payment_day`       INT NOT NULL DEFAULT 5,
+  -- D14 (2026-09-13): a forma combinada com o cliente. NULL = informar no
+  -- faturamento. A PRESENÇA decide; sem FK (a forma é central e o habilitado
+  -- é o vínculo institution×forma — regra da peça assertPaymentRules).
+  `tb_payment_types_id` INT DEFAULT NULL,
   `active`            CHAR(1) NOT NULL DEFAULT 'S',
   `created_at`        DATETIME DEFAULT NULL,
   `updated_at`        DATETIME DEFAULT NULL,
