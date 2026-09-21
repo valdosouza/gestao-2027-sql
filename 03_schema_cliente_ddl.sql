@@ -275,12 +275,14 @@ CREATE TABLE IF NOT EXISTS `tb_bank_slip_registration` (
   `barcode`           VARCHAR(44) DEFAULT NULL COMMENT 'write-once',
   `pix_copy_paste`    TEXT DEFAULT NULL COMMENT 'write-once',
   `pix_txid`          VARCHAR(35) DEFAULT NULL COMMENT 'write-once',
+  `last_queried_at`   DATETIME DEFAULT NULL COMMENT 'Última consulta ao banco (throttle/rodízio da consulta ativa; migration 056); NULL = nunca',
   `tb_user_id`        INT DEFAULT NULL,
   `created_at`        DATETIME DEFAULT NULL,
   `updated_at`        DATETIME DEFAULT NULL,
   `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`tb_institution_id`, `tb_bank_slip_id`, `attempt`),
   UNIQUE KEY `uk_bank_slip_registration_request` (`tb_institution_id`, `request_code`),
+  KEY `idx_bank_slip_registration_query` (`tb_institution_id`, `last_queried_at`),
   CONSTRAINT `fk_bank_slip_registration_slip`
     FOREIGN KEY (`tb_bank_slip_id`, `tb_institution_id`)
     REFERENCES `tb_bank_slip` (`id`, `tb_institution_id`)
@@ -303,7 +305,7 @@ CREATE TABLE IF NOT EXISTS `tb_bank_slip_registration_event` (
   `tb_bank_slip_id`   INT NOT NULL,
   `attempt`           INT NOT NULL,
   `event`             INT NOT NULL,
-  `kind`              CHAR(1) NOT NULL COMMENT 'S enviado · G registrado (A_RECEBER) · R recebido · M marcado recebido · A atrasado · P protesto · C cancelado no banco · V expirado · F falha (FALHA_EMISSAO / POST recusado)',
+  `kind`              CHAR(1) NOT NULL COMMENT 'S enviado · G registrado (A_RECEBER) · R recebido · M marcado recebido · A atrasado · P protesto · C cancelado no banco · V expirado · F falha (FALHA_EMISSAO / POST recusado) · K cancelamento pedido por nós · E efeito reaplicado (ato manual sobre R/C/V com efeito recusado — D-I25, migration 057)',
   `bank_status`       VARCHAR(30) DEFAULT NULL COMMENT 'Situação crua do banco',
   `dt_bank_status`    DATETIME DEFAULT NULL COMMENT 'dataHoraSituacao / dataSituacao',
   `source`            CHAR(1) NOT NULL COMMENT 'W webhook · Q consulta · P resposta direta ao nosso POST/cancelamento',
