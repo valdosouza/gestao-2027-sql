@@ -577,6 +577,24 @@ CREATE TABLE IF NOT EXISTS `tb_service_list` (
 -- vigilância, diversões, transporte, portos...). Prompt
 -- prompt_regra_tributacao_servico.md (D10/D12, 2026-09-02).
 
+CREATE TABLE IF NOT EXISTS `tb_service_national_code` (
+  `code`               char(6) NOT NULL COMMENT 'cTribNac (Anexo B do Padrão Nacional): item(2)+subitem(2)+desdobro(2)',
+  `tb_service_list_id` varchar(10) NOT NULL COMMENT 'Subitem da LC 116 (tb_service_list.id, ex.: 1.02)',
+  `description`        varchar(255) NOT NULL,
+  `active`             char(1) NOT NULL DEFAULT 'S',
+  `created_at`         datetime DEFAULT NULL,
+  `updated_at`         datetime DEFAULT NULL,
+  `deleted`            char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`code`),
+  KEY `idx_service_national_code_list` (`tb_service_list_id`),
+  CONSTRAINT `fk_service_national_code_list` FOREIGN KEY (`tb_service_list_id`) REFERENCES `tb_service_list` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Código de tributação NACIONAL da NFS-e (Anexo B v1.01, 22/01/2026): 338 códigos para os
+-- ~200 subitens da LC 116 — um subitem pode ter VÁRIOS desdobros, por isso é catálogo
+-- próprio (FK ao subitem) e não coluna de tb_service_list. CENTRAL (fato do mundo, como
+-- tb_cfop). A regra de ISS (tb_service_tax_rule.national_code) escolhe o código —
+-- pré-preenchido quando o subitem só tem um (Onda 3 NFS-e, D-N11/D-N11a).
+
 CREATE TABLE IF NOT EXISTS `tb_ncm` (
   `number`      varchar(10) NOT NULL,
   `description` varchar(150) DEFAULT NULL,

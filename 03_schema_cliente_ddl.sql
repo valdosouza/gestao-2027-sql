@@ -424,7 +424,7 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
   `tb_invoice_id`     INT NOT NULL COMMENT 'tb_invoice.id (= id do pedido)',
   `terminal`          INT NOT NULL DEFAULT 0,
   `event`             INT NOT NULL,
-  `kind`              CHAR(1) NOT NULL COMMENT 'E emitida · C cancelada · reservados T A R D I',
+  `kind`              CHAR(1) NOT NULL COMMENT 'E emitida · C cancelada. A voz do fisco NÃO entra aqui: vive em tb_invoice_<ramo>_transmission_event (D-N1, migration 058); nunca X',
   `dt_record`         DATE NOT NULL,
   `number`            VARCHAR(20) DEFAULT NULL COMMENT 'Snapshot do fato (E)',
   `serie`             VARCHAR(10) DEFAULT NULL,
@@ -442,6 +442,106 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
     REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Ramo de SERVIÇO da nota (migration 020 = mínimo; 058 = colunas congeladas no
+-- faturamento — um DPS declara UM serviço, D-N2; emitente/tomador ficam só no XML)
+CREATE TABLE IF NOT EXISTS `tb_invoice_service` (
+  `id`                 INT NOT NULL COMMENT 'tb_invoice.id (= id do pedido)',
+  `tb_institution_id`  INT NOT NULL,
+  `terminal`           INT NOT NULL DEFAULT 0,
+  `total_value`        DECIMAL(10,2) DEFAULT NULL,
+  `tb_service_list_id` VARCHAR(10) DEFAULT NULL COMMENT 'Subitem LC 116 (congelado)',
+  `national_code`      CHAR(6) DEFAULT NULL COMMENT 'cTribNac congelado (da regra ou derivado)',
+  `municipal_code`     VARCHAR(20) DEFAULT NULL COMMENT 'cTribMun congelado (da regra)',
+  `tb_city_id`         INT DEFAULT NULL COMMENT 'Cidade de INCIDÊNCIA (da regra) — cLocPrestacao',
+  `base_iss_value`     DECIMAL(10,2) DEFAULT NULL COMMENT 'Σ base de tb_order_item_issqn',
+  `aliq_iss`           DECIMAL(10,2) DEFAULT NULL COMMENT 'Alíquota (%) da regra',
+  `iss_value`          DECIMAL(10,2) DEFAULT NULL COMMENT 'Σ ISS de tb_order_item_issqn',
+  `iss_withheld`       CHAR(1) NOT NULL DEFAULT 'N' COMMENT 'tpRetISSQN: S = retido pelo tomador (D-N8)',
+  `liability`          CHAR(1) NOT NULL DEFAULT '1' COMMENT 'tribISSQN: 1 tributável · 2 imune · 3 exportação · 4 não incidência (D-N8)',
+  `dps_number`         INT DEFAULT NULL COMMENT 'nDPS — write-once, cunhado na 1ª transmissão (D-N3)',
+  `description`        TEXT DEFAULT NULL COMMENT 'xDescServ montado dos itens no faturamento',
+  `created_at`         DATETIME DEFAULT NULL,
+  `updated_at`         DATETIME DEFAULT NULL,
+  `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`, `terminal`),
+  KEY `updated_at` (`updated_at`),
+  KEY `idx_invoice_service_dps` (`tb_institution_id`, `dps_number`),
+  CONSTRAINT `fk_tb_invoice_service_invoice` FOREIGN KEY (`id`, `tb_institution_id`, `terminal`)
+    REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Habilitação do EMISSOR (Onda 3 NFS-e / NF-e, migration 058 — D-E1/D-N4): UMA
+-- linha por MODELO (SE · 55 · 65); autoridade DERIVADA do modelo; segredos (A1 em
+-- PEM) no cofre por ambiente (secret-store owner establishment); habilitado =
+-- presença + certificado válido (D-E4). Série = contador do emissor por modelo (D-E2).
+CREATE TABLE IF NOT EXISTS `tb_establishment_issuer` (
+  `tb_institution_id` INT NOT NULL COMMENT 'O emissor É a institution',
+  `model`             VARCHAR(2) NOT NULL COMMENT 'SE · 55 · 65 (domínio de tb_invoice.model)',
+  `environment`       CHAR(1) NOT NULL DEFAULT 'H' COMMENT 'H produção restrita/homologação · P produção',
+  `serie`             VARCHAR(5) NOT NULL DEFAULT '1' COMMENT 'Série do documento deste modelo (DPS: 00001–49999)',
+  `dps_last_number`   INT NOT NULL DEFAULT 0 COMMENT 'Último nDPS cunhado pelo emissor SE (D-N18, migration 060) — contínuo mesmo trocando a série',
+  `tb_user_id`        INT DEFAULT NULL,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `model`),
+  CONSTRAINT `fk_establishment_issuer_institution` FOREIGN KEY (`tb_institution_id`)
+    REFERENCES `setes_central`.`tb_institution` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transmissão do DPS (conceito B da Onda 3): 1 ramo de serviço × N tentativas;
+-- environment CONGELADO; dps_id/access_key/nfse_number/dh_proc WRITE-ONCE;
+-- last_queried_at = "nós olhamos o fisco". XML autorizado em STORAGE_PATH.
+CREATE TABLE IF NOT EXISTS `tb_invoice_service_transmission` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_invoice_id`     INT NOT NULL,
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `attempt`           INT NOT NULL COMMENT 'Sequência 1..N por nota',
+  `environment`       CHAR(1) NOT NULL COMMENT 'H/P congelado da habilitação no envio',
+  `invoice_event`     INT DEFAULT NULL COMMENT 'Evento E da nota (vida) a que a tentativa pertence — D-N27 (061)',
+  `dps_id`            VARCHAR(45) DEFAULT NULL COMMENT 'infDPS/@Id — nosso, nasce no envio',
+  `access_key`        VARCHAR(50) DEFAULT NULL COMMENT 'Chave de acesso da NFS-e — do fisco, write-once',
+  `nfse_number`       VARCHAR(13) DEFAULT NULL COMMENT 'nNFSe — do fisco, write-once',
+  `dh_proc`           DATETIME DEFAULT NULL COMMENT 'dhProc da autorização — write-once',
+  `last_queried_at`   DATETIME DEFAULT NULL COMMENT 'Última consulta ao fisco; NULL = nunca',
+  `tb_user_id`        INT DEFAULT NULL,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`),
+  KEY `idx_invoice_service_transmission_dps` (`tb_institution_id`, `dps_id`),          -- 059: nDPS do ramo reusado em toda tentativa (D-N3) — não é UNIQUE
+  UNIQUE KEY `uk_invoice_service_transmission_key` (`tb_institution_id`, `access_key`),
+  KEY `idx_invoice_service_transmission_query` (`tb_institution_id`, `last_queried_at`),
+  CONSTRAINT `fk_invoice_service_transmission_invoice` FOREIGN KEY (`tb_invoice_id`, `tb_institution_id`, `terminal`)
+    REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Voz do FISCO sobre a transmissão (conceito C, append-only): S enviado · A
+-- autorizada · R rejeitada · C cancelada · K cancelamento em voo · F falha;
+-- invoice_event = causa → efeito (C local); idempotência por (kind, dh).
+CREATE TABLE IF NOT EXISTS `tb_invoice_service_transmission_event` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_invoice_id`     INT NOT NULL,
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `attempt`           INT NOT NULL,
+  `event`             INT NOT NULL COMMENT 'Sequência 1..N por tentativa',
+  `kind`              CHAR(1) NOT NULL COMMENT 'S enviado · A autorizada · R rejeitada · C cancelada · K cancelamento em voo · F falha explícita · N pedido de cancelamento não consta no fisco (segue autorizada — D-N17)',
+  `authority_code`    VARCHAR(10) DEFAULT NULL COMMENT 'Código cru do fisco (E0xxx / HTTP)',
+  `message`           VARCHAR(255) DEFAULT NULL,
+  `dh`                DATETIME DEFAULT NULL COMMENT 'Data/hora informada pelo fisco',
+  `source`            CHAR(1) NOT NULL COMMENT 'P resposta direta · Q consulta',
+  `invoice_event`     INT DEFAULT NULL COMMENT 'Efeito produzido em tb_invoice_event (C); NULL = sem efeito ou pendência',
+  `tb_user_id`        INT DEFAULT NULL,
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`, `event`),
+  UNIQUE KEY `uk_invoice_service_transmission_event_dh` (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`, `kind`, `dh`),
+  CONSTRAINT `fk_invoice_service_transmission_event_tx` FOREIGN KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`)
+    REFERENCES `tb_invoice_service_transmission` (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- VÍNCULO/uso de Marca/Embalagem/Medida (revisão do sincronizador, D5/D17 —
 -- Valdo 2026-07-19; migration 018 realinha o baseline): catálogos CENTRAIS
@@ -656,6 +756,9 @@ CREATE TABLE IF NOT EXISTS `tb_entity_tax` (
   `tb_institution_id`          INT NOT NULL,
   `consumer`                   CHAR(1) DEFAULT 'N',       -- UI: radiobox S/N
   `tax_regime`                 VARCHAR(100) DEFAULT NULL, -- UI: dropdown canônico (1 Simples, 2 Simples excesso, 3 Lucro Real, 3 Lucro Presumido)
+  `simples_regime`             CHAR(1) DEFAULT NULL,      -- opSimpNac da DPS: 1 não optante · 2 MEI · 3 ME/EPP (migration 058, D-E3/D-E23)
+  `special_tax_regime`         CHAR(1) DEFAULT NULL,      -- regEspTrib da DPS 0..6 (CRET do legado) — fato do EMITENTE
+  `cnae`                       VARCHAR(7) DEFAULT NULL,   -- CNAE principal — fato do emitente
   `by_pass_st`                 CHAR(1) DEFAULT 'N',       -- UI: checkbox S/N
   `ind_ie_dest`                CHAR(1) DEFAULT NULL,      -- UI: dropdown 1/2/9 (NFe)
   `iss_exigibilidade`          CHAR(2) DEFAULT NULL,      -- UI: dropdown 01..07 (códigos do legado — decisão 15)
@@ -1071,6 +1174,7 @@ CREATE TABLE IF NOT EXISTS `tb_service_tax_rule` (
   `tb_service_list_id`  varchar(10) NOT NULL,
   `aliq`                decimal(10,2) NOT NULL DEFAULT 0.00,
   `municipal_code`      varchar(20) DEFAULT NULL,
+  `national_code`       char(6) DEFAULT NULL COMMENT 'cTribNac (setes_central.tb_service_national_code); NULL = único desdobro do subitem, derivado (migration 058, D-N11a)',
   `active`              char(1) NOT NULL DEFAULT 'S',
   `tb_taxes_id`         int(11) DEFAULT NULL,
   `created_at`          datetime DEFAULT NULL,
@@ -1079,7 +1183,8 @@ CREATE TABLE IF NOT EXISTS `tb_service_tax_rule` (
   PRIMARY KEY (`id`, `tb_institution_id`),
   KEY `idx_service_tax_rule_fact` (`tb_institution_id`, `tb_city_id`, `tb_service_list_id`),
   CONSTRAINT `fk_service_tax_rule_institution` FOREIGN KEY (`tb_institution_id`) REFERENCES `setes_central`.`tb_institution` (`id`),
-  CONSTRAINT `fk_service_tax_rule_city` FOREIGN KEY (`tb_city_id`) REFERENCES `setes_central`.`tb_city` (`id`)
+  CONSTRAINT `fk_service_tax_rule_city` FOREIGN KEY (`tb_city_id`) REFERENCES `setes_central`.`tb_city` (`id`),
+  CONSTRAINT `fk_service_tax_rule_national_code` FOREIGN KEY (`national_code`) REFERENCES `setes_central`.`tb_service_national_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Especialização FISCAL do serviço (D3 — espelho da tb_merchandise, herança
