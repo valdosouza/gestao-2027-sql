@@ -757,7 +757,8 @@ CREATE TABLE IF NOT EXISTS `tb_entity_tax` (
   `consumer`                   CHAR(1) DEFAULT 'N',       -- UI: radiobox S/N
   `tax_regime`                 VARCHAR(100) DEFAULT NULL, -- UI: dropdown canônico (1 Simples, 2 Simples excesso, 3 Lucro Real, 3 Lucro Presumido)
   `simples_regime`             CHAR(1) DEFAULT NULL,      -- opSimpNac da DPS: 1 não optante · 2 MEI · 3 ME/EPP (migration 058, D-E3/D-E23)
-  `simples_assessment`         CHAR(1) DEFAULT NULL,      -- regApTribSN da DPS (só opSimpNac 3): 1 tudo pelo SN · 2 ISSQN por fora · 3 tudo por fora; NULL = dentro do sublimite (migration 062, D-N19a)
+  `simples_assessment`         CHAR(1) DEFAULT NULL,      -- regApTribSN da DPS (só opSimpNac 3, OBRIGATÓRIO — Q-N36/E0166): 1 tudo pelo SN · 2 ISSQN por fora · 3 tudo por fora; NULL fora do regime 3 (migration 062, D-N19a)
+  `simples_total_tax_aliquot`  DECIMAL(5,2) DEFAULT NULL, -- pTotTribSN da DPS (só opSimpNac 3, OBRIGATÓRIO — Q-N37/E0712): % aproximado da alíquota efetiva do Simples (DAS) (migration 063)
   `special_tax_regime`         CHAR(1) DEFAULT NULL,      -- regEspTrib da DPS 0..6 (CRET do legado) — fato do EMITENTE
   `cnae`                       VARCHAR(7) DEFAULT NULL,   -- CNAE principal — fato do emitente
   `by_pass_st`                 CHAR(1) DEFAULT 'N',       -- UI: checkbox S/N
