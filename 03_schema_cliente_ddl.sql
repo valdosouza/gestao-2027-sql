@@ -1492,3 +1492,58 @@ CREATE TABLE IF NOT EXISTS `tb_order_stock_adjust_return` (
   CONSTRAINT `fk_adjust_return_adjust` FOREIGN KEY (`id`,`tb_institution_id`,`terminal`)
     REFERENCES `tb_order_stock_adjust` (`id`,`tb_institution_id`,`terminal`)
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- =====================================================================
+-- VIEWs de POLÍTICA publicadas para as APIs fiscais (espelho da migration 065 do setes-api —
+-- D-F32, Infra-IA/prompts/prompt_apis_fiscais_isoladas.md §14). Sem subconsulta na LISTA do
+-- SELECT (o MariaDB não funde): o "último evento" vai no ON por NOT EXISTS.
+--   vw_order_interface — interface do RAMO por pedido (espelho de resolveOrderInterface; D-A31)
+--   vw_invoice_life    — VIDA vigente da nota (último E) + último evento (E/C) — D-N27
+-- =====================================================================
+CREATE OR REPLACE VIEW `vw_order_interface` AS
+SELECT o.`tb_institution_id`,
+       o.`id`       AS `tb_order_id`,
+       o.`terminal`,
+       CASE
+         WHEN so.`id` IS NOT NULL THEN 'service-orders'
+         WHEN ra.`id` IS NOT NULL THEN 'order-returns'
+         ELSE 'orders'
+       END AS `interface_key`
+  FROM `tb_order` o
+  LEFT JOIN `tb_service_order` so
+    ON so.`id` = o.`id` AND so.`tb_institution_id` = o.`tb_institution_id`
+   AND so.`terminal` = o.`terminal` AND so.`deleted` = 'N'
+  LEFT JOIN `tb_order_stock_adjust_return` ra
+    ON ra.`id` = o.`id` AND ra.`tb_institution_id` = o.`tb_institution_id`
+   AND ra.`terminal` = o.`terminal`;
+
+-- ---------------------------------------------------------------------------
+-- 2. VIDA vigente da nota (D-N27) — o evento E mais recente (a vida aberta pelo
+--    último faturamento) e o ÚLTIMO evento da nota (E emitida / C cancelada).
+--    A nota pendente cancelada é soft-deletada (D3) e o cabeçalho continua aqui
+--    com `invoice_deleted` = 'S' — os eventos ficam (HIGH-3b da Onda 3).
+--    Nota sem nenhum evento (sincronizada da origem) → life_event/last_kind NULL.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE VIEW `vw_invoice_life` AS
+SELECT i.`tb_institution_id`,
+       i.`id`        AS `tb_invoice_id`,
+       i.`terminal`,
+       i.`deleted`   AS `invoice_deleted`,
+       le.`event`    AS `life_event`,
+       lv.`event`    AS `last_event`,
+       lv.`kind`     AS `last_kind`
+  FROM `tb_invoice` i
+  LEFT JOIN `tb_invoice_event` le
+    ON le.`tb_institution_id` = i.`tb_institution_id` AND le.`tb_invoice_id` = i.`id`
+   AND le.`terminal` = i.`terminal` AND le.`kind` = 'E' AND le.`deleted` = 'N'
+   AND NOT EXISTS (SELECT 1 FROM `tb_invoice_event` x
+                    WHERE x.`tb_institution_id` = le.`tb_institution_id` AND x.`tb_invoice_id` = le.`tb_invoice_id`
+                      AND x.`terminal` = le.`terminal` AND x.`kind` = 'E' AND x.`deleted` = 'N'
+                      AND x.`event` > le.`event`)
+  LEFT JOIN `tb_invoice_event` lv
+    ON lv.`tb_institution_id` = i.`tb_institution_id` AND lv.`tb_invoice_id` = i.`id`
+   AND lv.`terminal` = i.`terminal` AND lv.`deleted` = 'N'
+   AND NOT EXISTS (SELECT 1 FROM `tb_invoice_event` y
+                    WHERE y.`tb_institution_id` = lv.`tb_institution_id` AND y.`tb_invoice_id` = lv.`tb_invoice_id`
+                      AND y.`terminal` = lv.`terminal` AND y.`deleted` = 'N'
+                      AND y.`event` > lv.`event`);
