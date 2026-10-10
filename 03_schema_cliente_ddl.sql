@@ -459,6 +459,9 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_service` (
   `iss_value`          DECIMAL(10,2) DEFAULT NULL COMMENT 'Σ ISS de tb_order_item_issqn',
   `iss_withheld`       CHAR(1) NOT NULL DEFAULT 'N' COMMENT 'tpRetISSQN: S = retido pelo tomador (D-N8)',
   `liability`          CHAR(1) NOT NULL DEFAULT '1' COMMENT 'tribISSQN: 1 tributável · 2 imune · 3 exportação · 4 não incidência (D-N8)',
+  `classification_code`  CHAR(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'cClassTrib congelado no faturamento (D-IB9; unicode_ci por coluna — D-IB25; migration 066)',
+  `place_indicator_code` CHAR(6) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'cIndOp congelado no faturamento (D-IB9)',
+  `nbs`                  CHAR(9) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'NBS congelada no faturamento (cNBS do DPS)',
   `dps_number`         INT DEFAULT NULL COMMENT 'nDPS — write-once, cunhado na 1ª transmissão (D-N3)',
   `description`        TEXT DEFAULT NULL COMMENT 'xDescServ montado dos itens no faturamento',
   `created_at`         DATETIME DEFAULT NULL,
@@ -469,7 +472,11 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_service` (
   KEY `idx_invoice_service_dps` (`tb_institution_id`, `dps_number`),
   CONSTRAINT `fk_tb_invoice_service_invoice` FOREIGN KEY (`id`, `tb_institution_id`, `terminal`)
     REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
-    ON DELETE NO ACTION ON UPDATE NO ACTION
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  -- formato das colunas congeladas (D-IB26; migration 066 passo 4 — snapshot sem FK, servidor sem modo estrito)
+  CONSTRAINT `ck_invoice_service_classification_code` CHECK (`classification_code` IS NULL OR `classification_code` REGEXP '^[0-9]{6}$'),
+  CONSTRAINT `ck_invoice_service_place_indicator_code` CHECK (`place_indicator_code` IS NULL OR `place_indicator_code` REGEXP '^[0-9]{6}$'),
+  CONSTRAINT `ck_invoice_service_nbs` CHECK (`nbs` IS NULL OR `nbs` REGEXP '^[0-9]{9}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Habilitação do EMISSOR (Onda 3 NFS-e / NF-e, migration 058 — D-E1/D-N4): UMA
@@ -1196,13 +1203,36 @@ CREATE TABLE IF NOT EXISTS `tb_service` (
   `id`                      int(11) NOT NULL,
   `tb_institution_id`       int(11) NOT NULL,
   `tb_service_tax_rule_id`  int(11) DEFAULT NULL,
+  `nbs`                     char(9) DEFAULT NULL COMMENT 'NBS do serviço (setes_central.tb_nbs.code) — cNBS do DPS (D-IB6, migration 066)',
   `created_at`              datetime DEFAULT NULL,
   `updated_at`              datetime DEFAULT NULL,
   `deleted`                 char(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`id`, `tb_institution_id`),
   KEY `idx_service_tax_rule` (`tb_service_tax_rule_id`, `tb_institution_id`),
   CONSTRAINT `fk_service_product` FOREIGN KEY (`id`, `tb_institution_id`) REFERENCES `tb_product` (`id`, `tb_institution_id`),
-  CONSTRAINT `fk_service_tax_rule` FOREIGN KEY (`tb_service_tax_rule_id`, `tb_institution_id`) REFERENCES `tb_service_tax_rule` (`id`, `tb_institution_id`)
+  CONSTRAINT `fk_service_tax_rule` FOREIGN KEY (`tb_service_tax_rule_id`, `tb_institution_id`) REFERENCES `tb_service_tax_rule` (`id`, `tb_institution_id`),
+  CONSTRAINT `fk_service_nbs` FOREIGN KEY (`nbs`) REFERENCES `setes_central`.`tb_nbs` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Classificação IBS/CBS que o SERVIÇO presume (fase IBS/CBS — D-IB6/D-IB22, migration 066):
+-- peça 1:1 de tb_service; presença = "o serviço está classificado". FK física ao CÓDIGO do
+-- cClassTrib (a vigência e a aplicabilidade na NFS-e são conferidas pela peça
+-- @shared/ibscbs-classification na data do fato). CST nunca é guardado (= prefixo).
+CREATE TABLE IF NOT EXISTS `tb_service_ibscbs` (
+  `id`                    int(11) NOT NULL COMMENT 'tb_service.id',
+  `tb_institution_id`     int(11) NOT NULL,
+  `classification_code`   char(6) NOT NULL COMMENT 'cClassTrib escolhido (CST derivado = prefixo)',
+  `place_indicator_code`  char(6) NOT NULL COMMENT 'cIndOp escolhido (o Anexo VIII só sugere)',
+  `tb_user_id`            int(11) DEFAULT NULL,
+  `created_at`            datetime DEFAULT NULL,
+  `updated_at`            datetime DEFAULT NULL,
+  `deleted`               char(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`id`, `tb_institution_id`),
+  KEY `idx_service_ibscbs_classification` (`classification_code`),
+  KEY `idx_service_ibscbs_place` (`place_indicator_code`),
+  CONSTRAINT `fk_service_ibscbs_service` FOREIGN KEY (`id`, `tb_institution_id`) REFERENCES `tb_service` (`id`, `tb_institution_id`),
+  CONSTRAINT `fk_service_ibscbs_classification` FOREIGN KEY (`classification_code`) REFERENCES `setes_central`.`tb_tax_ibscbs_classification` (`code`),
+  CONSTRAINT `fk_service_ibscbs_place` FOREIGN KEY (`place_indicator_code`) REFERENCES `setes_central`.`tb_ibscbs_place_indicator` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Regra de tributação de SERVIÇO POR ITEM da ordem — irmã da
