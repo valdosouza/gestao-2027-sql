@@ -535,7 +535,7 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_service_transmission_event` (
   `attempt`           INT NOT NULL,
   `event`             INT NOT NULL COMMENT 'Sequência 1..N por tentativa',
   `kind`              CHAR(1) NOT NULL COMMENT 'S enviado · A autorizada · R rejeitada · C cancelada · K cancelamento em voo · F falha explícita · N pedido de cancelamento não consta no fisco (segue autorizada — D-N17)',
-  `authority_code`    VARCHAR(10) DEFAULT NULL COMMENT 'Código cru do fisco (E0xxx / HTTP)',
+  `authority_code`    VARCHAR(10) DEFAULT NULL COMMENT 'Código cru do fisco: E0xxx/HTTP nas rejeições · na voz C, o tipo do evento de cancelamento (101101 · 105102 substituição · 105104 · 305101 — D-F71, 067)',
   `message`           VARCHAR(255) DEFAULT NULL,
   `dh`                DATETIME DEFAULT NULL COMMENT 'Data/hora informada pelo fisco',
   `source`            CHAR(1) NOT NULL COMMENT 'P resposta direta · Q consulta',
@@ -546,8 +546,29 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_service_transmission_event` (
   `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`, `event`),
   UNIQUE KEY `uk_invoice_service_transmission_event_dh` (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`, `kind`, `dh`),
+  CONSTRAINT `ck_invoice_service_transmission_event_cancel_code`                   -- 067 (D-F71): domínio do código na voz C
+    CHECK (`kind` <> 'C' OR `authority_code` IS NULL OR `authority_code` IN ('101101', '105102', '105104', '305101')),
   CONSTRAINT `fk_invoice_service_transmission_event_tx` FOREIGN KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`)
     REFERENCES `tb_invoice_service_transmission` (`tb_institution_id`, `tb_invoice_id`, `terminal`, `attempt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- "Manter a nota" (067 — Rodada 13 das APIs fiscais, D-F67/D-F72/D-F73/D-F74): a NFS-e foi cancelada por
+-- SUBSTITUIÇÃO no fisco (e105102, fora do produto) e o humano decide NÃO cancelar a nota no ERP. Fato da NOTA
+-- (a voz é do fisco, a decisão é de uma pessoa); uma decisão por (nota, chave); motivo e autor obrigatórios.
+CREATE TABLE IF NOT EXISTS `tb_invoice_cancel_waiver` (
+  `tb_institution_id` INT NOT NULL,
+  `tb_invoice_id`     INT NOT NULL COMMENT 'tb_invoice.id (= id do pedido)',
+  `terminal`          INT NOT NULL DEFAULT 0,
+  `access_key`        VARCHAR(50) NOT NULL COMMENT 'Chave da NFS-e cancelada por SUBSTITUIÇÃO no fisco (a transmissão que a detém)',
+  `reason`            VARCHAR(255) NOT NULL COMMENT 'Motivo de manter a nota (obrigatório — D-F73)',
+  `tb_user_id`        INT NOT NULL COMMENT 'Quem decidiu (privilégio CANCELAR do ramo — D-F72)',
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `tb_invoice_id`, `terminal`, `access_key`),
+  CONSTRAINT `ck_invoice_cancel_waiver_access_key` CHECK (`access_key` REGEXP '^[0-9A-Z]{44}([0-9A-Z]{6})?$'),
+  CONSTRAINT `fk_invoice_cancel_waiver_invoice` FOREIGN KEY (`tb_invoice_id`, `tb_institution_id`, `terminal`)
+    REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- VÍNCULO/uso de Marca/Embalagem/Medida (revisão do sincronizador, D5/D17 —
