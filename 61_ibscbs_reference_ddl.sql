@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS `tb_tax_ibscbs_classification_validity` (
   `requires_regular_taxation`  CHAR(1) NOT NULL COMMENT 'ind_gTribRegular — classificacao que exige gTribRegular (o builder nao emite: 422 antes de faturar)',
   `source_version`             VARCHAR(30) NOT NULL COMMENT 'ex.: IT 2025.002 v1.70',
   `source_updated_at`          DATE NOT NULL COMMENT 'DataAtualizacao da linha oficial',
+  `absent_since_version`       VARCHAR(30) DEFAULT NULL COMMENT 'versao da fonte (IT) em que a linha deixou de vir — NULL = presente (D-IB36, script 63)',
   `created_at`                 DATETIME DEFAULT NULL,
   `updated_at`                 DATETIME DEFAULT NULL,
   `deleted`                    CHAR(1) NOT NULL DEFAULT 'N',
