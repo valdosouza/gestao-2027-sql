@@ -1548,18 +1548,20 @@ CREATE TABLE IF NOT EXISTS `tb_order_stock_adjust_return` (
 -- VIEWs de POLÍTICA publicadas para as APIs fiscais (espelho da migration 065 do setes-api —
 -- D-F32, Infra-IA/prompts/prompt_apis_fiscais_isoladas.md §14). Sem subconsulta na LISTA do
 -- SELECT (o MariaDB não funde): o "último evento" vai no ON por NOT EXISTS.
---   vw_order_interface — interface do RAMO por pedido (espelho de resolveOrderInterface; D-A31)
+--   vw_order_interface — interface do RAMO por pedido (o setes-api lê dela desde a F2a A2 — resolveOrderInterface; D-A31)
+--   Migration 068 (F2a A2, 2026-10-12): interface_key com COLLATE utf8mb4_bin — derivada de literal, sem ele dá erro 1267
+--   numa conexão de outra colação (PADROES_BANCO §11 regra 3). Rodar este bloco com SET NAMES utf8mb4 (latin1 → erro 1253).
 --   vw_invoice_life    — VIDA vigente da nota (último E) + último evento (E/C) — D-N27
 -- =====================================================================
 CREATE OR REPLACE VIEW `vw_order_interface` AS
 SELECT o.`tb_institution_id`,
        o.`id`       AS `tb_order_id`,
        o.`terminal`,
-       CASE
-         WHEN so.`id` IS NOT NULL THEN 'service-orders'
-         WHEN ra.`id` IS NOT NULL THEN 'order-returns'
-         ELSE 'orders'
-       END AS `interface_key`
+       (CASE
+          WHEN so.`id` IS NOT NULL THEN 'service-orders'
+          WHEN ra.`id` IS NOT NULL THEN 'order-returns'
+          ELSE 'orders'
+        END) COLLATE utf8mb4_bin AS `interface_key`
   FROM `tb_order` o
   LEFT JOIN `tb_service_order` so
     ON so.`id` = o.`id` AND so.`tb_institution_id` = o.`tb_institution_id`
