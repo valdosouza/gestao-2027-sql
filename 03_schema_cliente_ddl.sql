@@ -476,7 +476,10 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_service` (
   -- formato das colunas congeladas (D-IB26; migration 066 passo 4 — snapshot sem FK, servidor sem modo estrito)
   CONSTRAINT `ck_invoice_service_classification_code` CHECK (`classification_code` IS NULL OR `classification_code` REGEXP '^[0-9]{6}$'),
   CONSTRAINT `ck_invoice_service_place_indicator_code` CHECK (`place_indicator_code` IS NULL OR `place_indicator_code` REGEXP '^[0-9]{6}$'),
-  CONSTRAINT `ck_invoice_service_nbs` CHECK (`nbs` IS NULL OR `nbs` REGEXP '^[0-9]{9}$')
+  CONSTRAINT `ck_invoice_service_nbs` CHECK (`nbs` IS NULL OR `nbs` REGEXP '^[0-9]{9}$'),
+  -- a DECLARAÇÃO IBS/CBS é um TRIO (D-IB62/D-IB71; migration 070): par do grupo completo ou nenhum; grupo exige NBS (E0322)
+  CONSTRAINT `ck_invoice_service_ibscbs_pair` CHECK ((`classification_code` IS NULL) = (`place_indicator_code` IS NULL)),
+  CONSTRAINT `ck_invoice_service_ibscbs_requires_nbs` CHECK (`classification_code` IS NULL OR `nbs` IS NOT NULL)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Habilitação do EMISSOR (Onda 3 NFS-e / NF-e, migration 058 — D-E1/D-N4): UMA
