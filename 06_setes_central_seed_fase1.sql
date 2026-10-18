@@ -6,7 +6,9 @@
 -- INSERT IGNORE: idempotente, seguro para re-execução.
 --
 -- NÃO incluídos aqui (com motivo):
---   tb_interface_has_privilege → populado via tela "Interfaces" (módulo Super)
+--   tb_interface_has_privilege → seed de cada interface (D-GE19: toda tela nasce
+--     com os seus privilégios) + backfill `64_privileges_backfill_seed.sql`
+--     (2026-10-18); a tela "Interfaces" (módulo Super) segue editando
 --   tb_module / tb_module_has_interface → vivem no schema do CLIENTE (setes_<schema>),
 --     não na central; criados pelo próprio cliente no módulo Sistema
 --   tb_institution_has_interface → vivem no schema do CLIENTE; gerenciados
