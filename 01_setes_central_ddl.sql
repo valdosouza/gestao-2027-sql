@@ -117,6 +117,27 @@ CREATE TABLE IF NOT EXISTS `tb_user_password_reset` (
   CONSTRAINT `ck_user_password_reset_failed_attempts` CHECK (`failed_attempts` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Aviso ao DONO da conta (D-RS4, Valdo 2026-10-20 — espelho do script 67; parecer do guardião 2026-10-21): fato da CONTA (não do
+-- código), IRMÃ de tb_user_password_reset sob tb_user — o sistema avisou o titular, pelo e-mail de login GRAVADO, que alguém está
+-- forçando a recuperação da conta dele. Uma linha por aviso; `kind` = a CAUSA de lista fechada (forense, nunca vai ao texto do e-mail,
+-- que é neutro): E = código esgotado por tentativas erradas · C = teto de emissões por conta atingido. created_at = instante em que o
+-- sistema TOMOU a vaga da hora (o SMTP corre depois do COMMIT); coalescência = existe aviso do usuário há < 1 h (lida sob a trava da
+-- linha de tb_user, na MESMA transação que detectou o gatilho — regras 12/13). Não entra no teto de códigos (tabela própria); sem FK
+-- para o código (no caso C não existe código). seq = MAX+1 POR USUÁRIO. Nada se apaga (§3.1).
+CREATE TABLE IF NOT EXISTS `tb_user_password_reset_notice` (
+  `tb_user_id` int(11)  NOT NULL COMMENT 'Usuario dono da credencial avisado',
+  `seq`        int(11)  NOT NULL COMMENT 'N-esimo aviso do usuario: MAX+1 sob FOR UPDATE da linha tb_user',
+  `kind`       char(1)  NOT NULL COMMENT 'Causa (forense): E = codigo esgotado por erradas | C = teto de emissoes atingido',
+  `created_at` datetime NOT NULL COMMENT 'Instante UTC em que o sistema tomou a vaga da hora (e-mail sai depois do COMMIT)',
+  `updated_at` datetime DEFAULT NULL,
+  `deleted`    char(1)  NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_user_id`, `seq`),
+  CONSTRAINT `fk_user_password_reset_notice_to_user` FOREIGN KEY (`tb_user_id`) REFERENCES `tb_user` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_user_password_reset_notice_seq`  CHECK (`seq` > 0),
+  CONSTRAINT `ck_user_password_reset_notice_kind` CHECK (`kind` COLLATE utf8mb4_bin IN ('E', 'C'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 -- Especializações fiscais da entidade (herança por PK compartilhada — decisão 1)
 -- ---------------------------------------------------------------------
