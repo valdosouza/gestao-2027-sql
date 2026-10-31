@@ -14,7 +14,10 @@
 --           motivo (a exceção da A-PV8 foi substituída pelo CONFIGURAR nela) e sai também.
 --   D-PV40  nasce CONSULTAR (id 12): perguntar ao TERCEIRO (banco, fisco) a situação de um documento
 --           sem mudar estado nele — boleto `refresh`; nfse-api `refresh` e a passada do rodízio pela
---           interface do RAMO. Pares: bank-slips, orders, service-orders, order-returns.
+--           interface do RAMO. Pares: bank-slips, orders, service-orders. `order-returns` × CONSULTAR fica FORA
+--           por decisão (A-PV12, ratificada 2026-10-20: devolução é NF-e — a API da NFS-e não consulta por ela e a
+--           tela não tem o botão; a guarda pelo ramo a consome, marcada `absentBy` na lista única). Corrigido no
+--           passo 4 do plano 10-21 (2026-10-31): a 1ª versão do seed inseria o par e contrariava a A-PV12.
 --   Ids 11 e 12 = os próximos livres depois de CATALOGAR (10, seed 66 da branch `merchandise`).
 --
 -- Por `i18n_key`, nunca por id fixo de interface (lição do seed 40v1). Idempotente / RE-EXECUTÁVEL
@@ -57,7 +60,7 @@ INSERT IGNORE INTO `tmp_seed68_expected` (`k`, `pid`) VALUES ('general-configs',
 
 -- CONSULTAR (D-PV40): o banco (boletos) e o fisco pela interface do RAMO
 INSERT IGNORE INTO `tmp_seed68_expected` (`k`, `pid`) VALUES
-('bank-slips', 12), ('orders', 12), ('service-orders', 12), ('order-returns', 12);
+('bank-slips', 12), ('orders', 12), ('service-orders', 12);
 
 INSERT IGNORE INTO `tb_interface_has_privilege`
   (`tb_interface_id`, `tb_privilege_id`, `active`, `created_at`, `updated_at`, `deleted`)
