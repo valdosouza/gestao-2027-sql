@@ -30,16 +30,30 @@
 --  "verbo exige VISUALIZAR" aqui (a invariante é da ESCRITA — D-PV60); (c) nunca DISTINCT para "limpar" duplicata; (d) apagar o usuário
 --  DEFINIDOR quebra a view (erro 1449) — recriar as views quando o dono mudar (A2).
 --
--- Re-executável (CREATE OR REPLACE). Rodar com `SET NAMES utf8mb4` (numa sessão latin1 o COLLATE utf8mb4_bin dá erro 1253) e com o
+-- D-EA7 (Valdo 2026-10-31 — `prompt_endurecer_autenticacao.md`; parecer do guardião): o FATO "a senha que vale hoje foi definida no
+-- instante T" — `tb_user.password_set_at DATETIME NULL` (UTC, ao segundo, a precisão do `iat`), AO LADO do hash, gravado SÓ pela peça
+-- "definir a senha" do setes-api (criação da credencial, 1ª senha da A-PV23, troca pelo código, script do Super) com o relógio de quem
+-- assina o token; nunca pelo salvar do cadastro nem pela migração do hash (D-EA9); sem `ON UPDATE` (seria o `updated_at` recusado voltando).
+-- NULL = senha definida antes da regra (sem revogação — o TTL de 24 h fecha); SEM backfill (um T carimbado no deploy seria fato falso).
+-- A `vw_user_link` expõe a coluna CRUA (nunca `UNIX_TIMESTAMP` — depende do `time_zone` de quem lê); a biblioteca compara na MESMA leitura
+-- da sessão: `password_set_at <= iat` vale (iat = T vale; iat < T = 401 SESSION_REVOKED). Vai COM o hash para `tb_user_credential` na A2
+-- (D-AU5). O setes-sync segue criando `tb_user` sem a coluna (NULL — sem senha, sem token). `ADD COLUMN IF NOT EXISTS` é só do MariaDB
+-- (a ida para o MySQL 8 — F3 — revê, como no PADROES §11 regra 11 (c)).
+--
+-- Re-executável (ADD COLUMN IF NOT EXISTS + CREATE OR REPLACE). Rodar com `SET NAMES utf8mb4` (numa sessão latin1 o COLLATE utf8mb4_bin dá erro 1253) e com o
 -- usuário DONO de sempre (o DEFINER é quem cria). Aplicar em setes_central ANTES do setes-api com a migration 075 (as views por schema
 -- leem estas) — o boot do setes-api confere as duas pelo NOME (assertAccessViews).
 -- =============================================================================
 SET NAMES utf8mb4;
 
+ALTER TABLE `setes_central`.`tb_user`
+  ADD COLUMN IF NOT EXISTS `password_set_at` DATETIME NULL DEFAULT NULL AFTER `password`;
+
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW `setes_central`.`vw_user_link` AS
 SELECT ihu.`tb_user_id`,
        ihu.`tb_institution_id`,
        i.`schema_name`,
+       u.`password_set_at`,
        (CASE
           WHEN ihu.`kind` COLLATE utf8mb4_bin = 'super' AND ihu.`tb_institution_id` = 1 THEN 'super'   -- 1 = SETES_INSTITUTION_ID (cerca)
           WHEN ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'

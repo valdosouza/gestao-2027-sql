@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS `tb_entity_has_mailing` (
 CREATE TABLE IF NOT EXISTS `tb_user` (
   `id`             int(11) NOT NULL,
   `password`       varchar(100) DEFAULT NULL,
+  `password_set_at` datetime DEFAULT NULL,  -- D-EA7: instante (UTC) em que a senha atual foi definida — token com iat anterior = revogado
   `active`         char(1) NOT NULL DEFAULT 'S',
   `activation_key` varchar(255) DEFAULT NULL,
   `created_at`     datetime DEFAULT NULL,
@@ -902,6 +903,7 @@ CREATE OR REPLACE SQL SECURITY DEFINER VIEW `setes_central`.`vw_user_link` AS
 SELECT ihu.`tb_user_id`,
        ihu.`tb_institution_id`,
        i.`schema_name`,
+       u.`password_set_at`,
        (CASE
           WHEN ihu.`kind` COLLATE utf8mb4_bin = 'super' AND ihu.`tb_institution_id` = 1 THEN 'super'   -- 1 = SETES_INSTITUTION_ID (cerca)
           WHEN ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
