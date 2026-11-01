@@ -35,6 +35,15 @@ SELECT i.`id`, 'page_size',
   FROM `tb_interface` i
  WHERE i.`deleted` = 'N' AND i.`i18n_key` = 'institution-interfaces';
 
+-- D-PV25 (gate adversarial do delta da costura A1, L5): a config `page_size` acima faz da tela uma interface CONFIGURÁVEL — o par
+-- (interface × CONFIGURAR, 11) nasce junto quando o verbo já existe com o nome exato (seed 68); assim a ordem 65 × 68 não importa.
+INSERT IGNORE INTO `tb_interface_has_privilege`
+  (`tb_interface_id`, `tb_privilege_id`, `active`, `created_at`, `updated_at`, `deleted`)
+SELECT i.`id`, p.`id`, 'S', NOW(), NOW(), 'N'
+  FROM `tb_interface` i
+  JOIN `tb_privilege` p ON p.`id` = 11 AND BINARY p.`description` = 'CONFIGURAR' AND p.`deleted` = 'N'
+ WHERE i.`deleted` = 'N' AND i.`i18n_key` = 'institution-interfaces';
+
 -- Flag técnica só da Setes (institution 1) — D-PV10 tirou o atalho "a Setes tem acesso a tudo". Linha que já existe desligada ou
 -- excluída é RELIGADA (gate socrático da D-PV11: o NOT EXISTS sozinho deixava a flag desligada como estava)
 UPDATE `tb_feature_flag` SET `enabled` = TRUE, `deleted` = 'N', `updated_at` = NOW()

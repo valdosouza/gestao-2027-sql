@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS `tb_entity_has_mailing` (
 CREATE TABLE IF NOT EXISTS `tb_user` (
   `id`             int(11) NOT NULL,
   `password`       varchar(100) DEFAULT NULL,
+  `password_set_at` datetime DEFAULT NULL,  -- D-EA7: instante (UTC) em que a senha atual foi definida — token com iat anterior = revogado
   `active`         char(1) NOT NULL DEFAULT 'S',
   `activation_key` varchar(255) DEFAULT NULL,
   `created_at`     datetime DEFAULT NULL,
@@ -896,3 +897,36 @@ CREATE TABLE IF NOT EXISTS `tb_nbs` (
   CONSTRAINT `ck_nbs_code` CHECK (`code` REGEXP '^[0-9]{9}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================================
+-- VIEWs CENTRAIS do VEREDITO DE ACESSO (costura A1 da frente auth-api — D-AU3/D-AU6, 2026-10-31; espelho do script 70).
+-- vw_user_link = vínculo VIVO + perfil ('super' só na Setes, `kind` em binário e sem PAD SPACE); vw_interface_catalog = interface
+-- viva (chave sem espaço à direita) + modo de concessão (delegável do Super — D-PV11). Literais amarrados às constantes do código
+-- pelo boot do setes-api.
+-- =====================================================================
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW `setes_central`.`vw_user_link` AS
+SELECT ihu.`tb_user_id`,
+       ihu.`tb_institution_id`,
+       i.`schema_name`,
+       u.`password_set_at`,
+       (CASE
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'super'
+               AND ihu.`tb_institution_id` = 1 THEN 'super'                     -- 1 = SETES_INSTITUTION_ID (cerca)
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
+          ELSE 'user'
+        END) COLLATE utf8mb4_bin AS `profile`,
+       (CASE WHEN ihu.`tb_institution_id` = 1 THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `vendor`
+  FROM `setes_central`.`tb_institution_has_user` ihu
+  JOIN `setes_central`.`tb_user` u
+    ON u.`id` = ihu.`tb_user_id` AND u.`active` = 'S' AND u.`deleted` = 'N'
+  JOIN `setes_central`.`tb_institution` i
+    ON i.`id` = ihu.`tb_institution_id` AND i.`active` = 'S' AND i.`deleted` = 'N'
+ WHERE ihu.`active` = 'S' AND ihu.`deleted` = 'N';
+
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW `setes_central`.`vw_interface_catalog` AS
+SELECT i.`id` AS `tb_interface_id`,
+       i.`i18n_key` COLLATE utf8mb4_bin AS `interface_key`,
+       (CASE WHEN i.`i18n_key` COLLATE utf8mb4_bin IN ('institution-interfaces')   -- = DELEGABLE_SUPER_INTERFACES (cerca)
+             THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `delegable`
+  FROM `setes_central`.`tb_interface` i
+ WHERE i.`deleted` = 'N'
+   AND CHAR_LENGTH(i.`i18n_key`) = CHAR_LENGTH(RTRIM(i.`i18n_key`));     -- sem PAD SPACE: 'orders ' nunca responde por 'orders'

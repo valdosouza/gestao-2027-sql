@@ -1603,3 +1603,49 @@ SELECT i.`tb_institution_id`,
                     WHERE y.`tb_institution_id` = lv.`tb_institution_id` AND y.`tb_invoice_id` = lv.`tb_invoice_id`
                       AND y.`terminal` = lv.`terminal` AND y.`deleted` = 'N'
                       AND y.`event` > lv.`event`);
+
+-- =====================================================================
+-- VIEWs do VEREDITO DE ACESSO (costura A1 da frente auth-api — D-AU3/D-AU6/D-AU8, 2026-10-31; espelho da migration
+-- 075 do setes-api). Leem as views CENTRAIS do script 70 (setes_central.vw_user_link e vw_interface_catalog) — aplicar
+-- o 70 ANTES. Presença = permissão; o único leitor é a biblioteca `fiscal-api/access`. Rodar com `SET NAMES utf8mb4`.
+-- =====================================================================
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW `vw_user_reach` AS
+SELECT l.`tb_user_id`,
+       l.`tb_institution_id`,
+       c.`tb_interface_id`,
+       c.`interface_key`,
+       l.`profile`,
+       c.`delegable`
+  FROM `setes_central`.`vw_user_link` l
+ CROSS JOIN `setes_central`.`vw_interface_catalog` c
+  LEFT JOIN `tb_institution_has_interface` ihi
+    ON ihi.`tb_institution_id` = l.`tb_institution_id`
+   AND ihi.`tb_interface_id` = c.`tb_interface_id`
+   AND ihi.`active` = 'S' AND ihi.`deleted` = 'N'
+ WHERE l.`profile` = 'super'
+    OR (c.`delegable` = 'S' AND l.`vendor` = 'S')
+    OR (c.`delegable` = 'N' AND ihi.`tb_interface_id` IS NOT NULL);
+
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW `vw_user_access` AS
+SELECT r.`tb_user_id`,
+       r.`tb_institution_id`,
+       r.`tb_interface_id`,
+       r.`interface_key`,
+       p.`id` AS `tb_privilege_id`,
+       p.`description` COLLATE utf8mb4_bin AS `privilege`,
+       r.`profile`,
+       r.`delegable`
+  FROM `vw_user_reach` r
+  JOIN `setes_central`.`tb_interface_has_privilege` ihp
+    ON ihp.`tb_interface_id` = r.`tb_interface_id` AND ihp.`active` = 'S' AND ihp.`deleted` = 'N'
+  JOIN `setes_central`.`tb_privilege` p
+    ON p.`id` = ihp.`tb_privilege_id` AND p.`deleted` = 'N'
+   AND CHAR_LENGTH(p.`description`) = CHAR_LENGTH(RTRIM(p.`description`))
+  LEFT JOIN `tb_user_has_privilege` g
+    ON g.`tb_user_id` = r.`tb_user_id`
+   AND g.`tb_interface_id` = ihp.`tb_interface_id`
+   AND g.`tb_privilege_id` = ihp.`tb_privilege_id`
+   AND g.`active` = 'S' AND g.`deleted` = 'N'
+ WHERE r.`profile` = 'super'
+    OR (r.`profile` = 'admin' AND r.`delegable` = 'N')
+    OR g.`tb_user_id` IS NOT NULL;
