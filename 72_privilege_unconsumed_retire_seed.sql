@@ -16,7 +16,8 @@
 --           (setes_setes, o único schema de cliente com `tb_user_has_privilege`). Concessão antiga que exista
 --           noutro schema fica como está (D-PV60: sem script nas concessões) — morta pela view.
 --           Se um dia um código passar a conferir um desses pares, o par volta na MESMA entrega do código
---           (regra da D-PV9: par novo consumido = lista + seed antes do app).
+--           (regra da D-PV9: par novo consumido = lista + seed antes do app) — e, pela D-PV64, com a LISTA de quem volta a
+--           ter o verbo (as concessões antigas reativam na volta), mostrada antes do "vai".
 --
 -- Por `i18n_key`, nunca por id fixo de interface (lição do seed 40v1). Ids de privilégio fixos do catálogo
 -- (2 = ALTERAR, 3 = EXCLUIR, 6 = VISUALIZAR). Idempotente / RE-EXECUTÁVEL (UPDATE só do que ainda está vivo;
