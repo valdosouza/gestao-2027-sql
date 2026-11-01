@@ -90,7 +90,9 @@ SELECT COUNT(*) AS `configurar_pairs`
  WHERE ihp.`tb_privilege_id` = 11 AND ihp.`deleted` = 'N' AND ihp.`active` = 'S';
 
 -- Conferência 3 (FALHA ALTO): privilégio ausente, par esperado sem linha nenhuma, ou ALTERAR ainda vivo num painel.
-SET @seed68_privs := (SELECT COUNT(*) FROM `tb_privilege` WHERE `id` IN (11, 12) AND `deleted` = 'N');
+-- pelo NOME exato, não só pelo id (gate adversarial do delta da costura A1, L4: o INSERT IGNORE cala o id 11/12 ocupado por outro verbo)
+SET @seed68_privs := (SELECT COUNT(*) FROM `tb_privilege` WHERE `deleted` = 'N'
+  AND ((`id` = 11 AND BINARY `description` = 'CONFIGURAR') OR (`id` = 12 AND BINARY `description` = 'CONSULTAR')));
 SET @seed68_missing := (
   SELECT COUNT(*)
     FROM `tmp_seed68_expected` e
