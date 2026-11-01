@@ -418,6 +418,9 @@ ALTER TABLE `tb_invoice`
     COMMENT 'number como inteiro (coluna gerada) — MAX+1 por modelo/série pelo índice (migration 045)';
 ALTER TABLE `tb_invoice`
   ADD KEY IF NOT EXISTS `idx_invoice_number_seq` (`tb_institution_id`, `model`, `serie`, `deleted`, `number_seq`);
+-- D-IB101 (migration 076 do setes-api): a última data de emissão de nota viva (fronteira da opção de apuração do IBS/CBS) em O(log n)
+ALTER TABLE `tb_invoice`
+  ADD KEY IF NOT EXISTS `idx_invoice_live_emission` (`tb_institution_id`, `deleted`, `dt_emission`);
 
 CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
   `tb_institution_id` INT NOT NULL,
