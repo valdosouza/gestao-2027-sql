@@ -418,9 +418,6 @@ ALTER TABLE `tb_invoice`
     COMMENT 'number como inteiro (coluna gerada) — MAX+1 por modelo/série pelo índice (migration 045)';
 ALTER TABLE `tb_invoice`
   ADD KEY IF NOT EXISTS `idx_invoice_number_seq` (`tb_institution_id`, `model`, `serie`, `deleted`, `number_seq`);
--- D-IB101 (migration 076 do setes-api): a última data de emissão de nota viva (fronteira da opção de apuração do IBS/CBS) em O(log n)
-ALTER TABLE `tb_invoice`
-  ADD KEY IF NOT EXISTS `idx_invoice_live_emission` (`tb_institution_id`, `deleted`, `dt_emission`);
 
 CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
   `tb_institution_id` INT NOT NULL,
@@ -445,6 +442,10 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
     REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- D-IB101/D-IB103 (migration 076 do setes-api): a última nota viva emitida pelo ERP web (evento E) — fronteira da opção de apuração do
+-- IBS/CBS — em O(1) linhas lidas
+ALTER TABLE `tb_invoice_event`
+  ADD KEY IF NOT EXISTS `idx_invoice_event_issue` (`tb_institution_id`, `kind`, `deleted`, `dt_record`);
 
 -- Ramo de SERVIÇO da nota (migration 020 = mínimo; 058 = colunas congeladas no
 -- faturamento — um DPS declara UM serviço, D-N2; emitente/tomador ficam só no XML)
