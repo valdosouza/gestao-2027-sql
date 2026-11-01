@@ -791,17 +791,20 @@ CREATE TABLE IF NOT EXISTS `tb_sync_conflict` (
 -- Dados: rotina do Super setes-api/scripts/load-ibscbs-catalog.ts (IT 2025.002 + Anexo VII + NBS)
 -- ---------------------------------------------------------------------
 
--- A1. CST do IBS/CBS (familia de tb_tax_pis/_cofins). Flags de grupo do CST (ind_gRed,
---     ind_gDif...) sem consumidor no 1º release — entram por coluna quando houver.
+-- A1. CST do IBS/CBS (familia de tb_tax_pis/_cofins). Flags de grupo do CST: ind_gIBSCBS entrou
+--     pela D-IB113 (script 73 — requires_ibscbs_group); os demais (ind_gRed, ind_gDif...) seguem sem
+--     consumidor — entram por coluna quando houver.
 CREATE TABLE IF NOT EXISTS `tb_tax_ibscbs` (
   `id`                 CHAR(3) NOT NULL COMMENT 'CST do IBS/CBS (ex.: 000)',
   `description`        VARCHAR(255) NOT NULL,
+  `requires_ibscbs_group` CHAR(1) DEFAULT NULL COMMENT 'ind_gIBSCBS do CST: S = o DPS leva cIndOp + gIBSCBS · N = proibidos (o ERP recusa — D-IB113) · NULL = carga anterior ao script 73 (a peca recusa)',
   `source_version`     VARCHAR(30) NOT NULL COMMENT 'Proveniencia: ex. IT 2025.002 v1.70',
   `created_at`         DATETIME DEFAULT NULL,
   `updated_at`         DATETIME DEFAULT NULL,
   `deleted`            CHAR(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`id`),
-  CONSTRAINT `ck_tax_ibscbs_id` CHECK (`id` REGEXP '^[0-9]{3}$')
+  CONSTRAINT `ck_tax_ibscbs_id` CHECK (`id` REGEXP '^[0-9]{3}$'),
+  CONSTRAINT `ck_tax_ibscbs_requires_group` CHECK (`requires_ibscbs_group` IS NULL OR `requires_ibscbs_group` COLLATE utf8mb4_bin IN ('S','N'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- A2. IDENTIDADE do cClassTrib (D-IB22): o servico/regra presume o CODIGO, nao a versao.
