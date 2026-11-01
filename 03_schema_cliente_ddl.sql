@@ -1640,6 +1640,7 @@ SELECT r.`tb_user_id`,
     ON ihp.`tb_interface_id` = r.`tb_interface_id` AND ihp.`active` = 'S' AND ihp.`deleted` = 'N'
   JOIN `setes_central`.`tb_privilege` p
     ON p.`id` = ihp.`tb_privilege_id` AND p.`deleted` = 'N'
+   AND CHAR_LENGTH(p.`description`) = CHAR_LENGTH(RTRIM(p.`description`))
   LEFT JOIN `tb_user_has_privilege` g
     ON g.`tb_user_id` = r.`tb_user_id`
    AND g.`tb_interface_id` = ihp.`tb_interface_id`

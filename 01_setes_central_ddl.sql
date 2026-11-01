@@ -896,8 +896,9 @@ CREATE TABLE IF NOT EXISTS `tb_nbs` (
 
 -- =====================================================================
 -- VIEWs CENTRAIS do VEREDITO DE ACESSO (costura A1 da frente auth-api — D-AU3/D-AU6, 2026-10-31; espelho do script 70).
--- vw_user_link = vínculo VIVO + perfil ('super' só na Setes, `kind` em binário); vw_interface_catalog = interface viva +
--- modo de concessão (delegável do Super — D-PV11). Literais amarrados às constantes do código pelo boot do setes-api.
+-- vw_user_link = vínculo VIVO + perfil ('super' só na Setes, `kind` em binário e sem PAD SPACE); vw_interface_catalog = interface
+-- viva (chave sem espaço à direita) + modo de concessão (delegável do Super — D-PV11). Literais amarrados às constantes do código
+-- pelo boot do setes-api.
 -- =====================================================================
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW `setes_central`.`vw_user_link` AS
 SELECT ihu.`tb_user_id`,
@@ -905,8 +906,9 @@ SELECT ihu.`tb_user_id`,
        i.`schema_name`,
        u.`password_set_at`,
        (CASE
-          WHEN ihu.`kind` COLLATE utf8mb4_bin = 'super' AND ihu.`tb_institution_id` = 1 THEN 'super'   -- 1 = SETES_INSTITUTION_ID (cerca)
-          WHEN ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'super'
+               AND ihu.`tb_institution_id` = 1 THEN 'super'                     -- 1 = SETES_INSTITUTION_ID (cerca)
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
           ELSE 'user'
         END) COLLATE utf8mb4_bin AS `profile`,
        (CASE WHEN ihu.`tb_institution_id` = 1 THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `vendor`
@@ -923,4 +925,5 @@ SELECT i.`id` AS `tb_interface_id`,
        (CASE WHEN i.`i18n_key` COLLATE utf8mb4_bin IN ('institution-interfaces')   -- = DELEGABLE_SUPER_INTERFACES (cerca)
              THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `delegable`
   FROM `setes_central`.`tb_interface` i
- WHERE i.`deleted` = 'N';
+ WHERE i.`deleted` = 'N'
+   AND CHAR_LENGTH(i.`i18n_key`) = CHAR_LENGTH(RTRIM(i.`i18n_key`));     -- sem PAD SPACE: 'orders ' nunca responde por 'orders'

@@ -2,7 +2,7 @@
 -- 70 — VIEWs CENTRAIS do veredito de acesso: setes_central.vw_user_link + setes_central.vw_interface_catalog
 -- Escopo: setes
 -- Origem: costura A1 da frente auth-api (D-AU3/D-AU6/D-AU8/D-AU12, Valdo 2026-10-31 — Infra-IA/prompts/prompt_frente_auth_api.md;
---         parecer do guardião no §7 de lá); PADROES_BANCO §6/§11 (regras 3 e 11)/§12; D-UC2/D-UC9; D-PV11/D-PV37; A-PV1/D-PV24.
+--         parecer do guardião no §3 de lá); PADROES_BANCO §6/§11 (regras 3 e 11)/§12; D-UC2/D-UC9; D-PV11/D-PV37; A-PV1/D-PV24.
 --
 -- O conceito: o veredito "o usuário U pode exercer o verbo V na interface I do estabelecimento X" é a COMPOSIÇÃO de três peças, cada uma
 -- com o seu fato gerador — o VÍNCULO vivo com o perfil (ato do admin), o ALCANCE da interface (venda/liberação) e a CONCESSÃO do verbo
@@ -21,6 +21,10 @@
 --    serviço compara exato em qualquer colação de conexão (erro 1267 nunca), e 'Admin' NÃO vira admin (o JS compara exato).
 --  - `kind` comparado em BINÁRIO: a vw_user_link é o ÚNICO intérprete de `tb_institution_has_user.kind` (perfil × origem 'SYNC' →
 --    qualquer valor fora de super/admin = 'user'); 'super' só vale na institution da Setes (o `resolveRole` do login morre aqui).
+--  - SEM PAD SPACE (gate adversarial da A1, provado no MariaDB 10.4.20): o `utf8mb4_bin` é PAD SPACE — 'admin ' = 'admin'. Todo texto que
+--    DECIDE (o `kind` aqui, a `i18n_key` do catálogo, o nome do verbo na 075) exige "sem espaço à direita":
+--    `CHAR_LENGTH(x) = CHAR_LENGTH(RTRIM(x))` — portável para o MySQL 8 (o `utf8mb4_nopad_bin` é só do MariaDB). 'admin ' vira 'user'
+--    (como 'SYNC'); a interface 'orders ' fica fora do catálogo — nunca empresta licença/par à 'orders' (o JS de todo o resto compara EXATO).
 --  - Literais com dono no código, amarrados por CERCA (teste ao vivo do setes-api confere view × constante): `1` = SETES_INSTITUTION_ID
 --    (D-PV37 — a troca pelo predicado do grupo, onda 1, é um ato só); 'institution-interfaces' = DELEGABLE_SUPER_INTERFACES (D-PV11 (d)).
 --    Na A2 o modo de concessão vira DADO do registro (dono = auth-api — D-AU2).
@@ -55,8 +59,9 @@ SELECT ihu.`tb_user_id`,
        i.`schema_name`,
        u.`password_set_at`,
        (CASE
-          WHEN ihu.`kind` COLLATE utf8mb4_bin = 'super' AND ihu.`tb_institution_id` = 1 THEN 'super'   -- 1 = SETES_INSTITUTION_ID (cerca)
-          WHEN ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'super'
+               AND ihu.`tb_institution_id` = 1 THEN 'super'                     -- 1 = SETES_INSTITUTION_ID (cerca)
+          WHEN CHAR_LENGTH(ihu.`kind`) = CHAR_LENGTH(RTRIM(ihu.`kind`)) AND ihu.`kind` COLLATE utf8mb4_bin = 'admin' THEN 'admin'
           ELSE 'user'
         END) COLLATE utf8mb4_bin AS `profile`,
        (CASE WHEN ihu.`tb_institution_id` = 1 THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `vendor`
@@ -73,4 +78,5 @@ SELECT i.`id` AS `tb_interface_id`,
        (CASE WHEN i.`i18n_key` COLLATE utf8mb4_bin IN ('institution-interfaces')   -- = DELEGABLE_SUPER_INTERFACES (cerca)
              THEN 'S' ELSE 'N' END) COLLATE utf8mb4_bin AS `delegable`
   FROM `setes_central`.`tb_interface` i
- WHERE i.`deleted` = 'N';
+ WHERE i.`deleted` = 'N'
+   AND CHAR_LENGTH(i.`i18n_key`) = CHAR_LENGTH(RTRIM(i.`i18n_key`));     -- sem PAD SPACE: 'orders ' nunca responde por 'orders'
