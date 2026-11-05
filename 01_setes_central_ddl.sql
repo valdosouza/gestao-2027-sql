@@ -139,6 +139,39 @@ CREATE TABLE IF NOT EXISTS `tb_user_password_reset_notice` (
   CONSTRAINT `ck_user_password_reset_notice_kind` CHECK (`kind` COLLATE utf8mb4_bin IN ('E', 'C'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Falha de login (D-EA1/D-EA2, 2026-10-31 — espelho do script 74; parecer do guardião 2026-11-01): "uma senha ERRADA foi julgada contra a
+-- credencial do usuário, num login ADMITIDO (conta fora do bloqueio), no instante T". Só falhas; append-only (§3.1). Bloqueio DERIVADO:
+-- 10+ linhas do usuário com created_at nos últimos 15 min (janela deslizante, sem botão). Não grava: senha certa, e-mail inexistente,
+-- conta sem credencial, tentativa durante o bloqueio. seq = MAX+1 POR USUÁRIO sob a trava da linha de tb_user (regras 12 e 13).
+CREATE TABLE IF NOT EXISTS `tb_user_login_failure` (
+  `tb_user_id` int(11)  NOT NULL COMMENT 'Usuario dono da credencial contra a qual a senha errada foi julgada',
+  `seq`        int(11)  NOT NULL COMMENT 'N-esima falha do usuario: MAX+1 sob FOR UPDATE da linha tb_user',
+  `created_at` datetime NOT NULL COMMENT 'Instante UTC (NOW do banco) do julgamento - a janela de 15 min da D-EA1 le este relogio',
+  `updated_at` datetime DEFAULT NULL COMMENT 'Padrao da casa; fato imutavel - sem escritor depois do INSERT',
+  `deleted`    char(1)  NOT NULL DEFAULT 'N' COMMENT 'Padrao da casa; sem escritor - o julgamento conta toda linha (soft delete nao desbloqueia)',
+  PRIMARY KEY (`tb_user_id`, `seq`),
+  KEY `idx_user_login_failure_window` (`tb_user_id`, `created_at`),
+  CONSTRAINT `fk_user_login_failure_to_user` FOREIGN KEY (`tb_user_id`) REFERENCES `tb_user` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_user_login_failure_seq` CHECK (`seq` > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='D-EA2: senha errada julgada contra a credencial num login admitido; bloqueio = 10+ na janela de 15 min (derivado)';
+
+-- Aviso ao dono da conta BLOQUEADA no login (D-EA3, nome da D-EA14 — espelho do script 74): vaga horária tomada na falha que leva a
+-- janela a 10 (D-EA15), sob SAVEPOINT na transação da falha; e-mail neutro depois do COMMIT. Sem kind (causa única). Nada se apaga.
+CREATE TABLE IF NOT EXISTS `tb_user_login_block_notice` (
+  `tb_user_id` int(11)  NOT NULL COMMENT 'Usuario dono da credencial avisado',
+  `seq`        int(11)  NOT NULL COMMENT 'N-esimo aviso do usuario: MAX+1 sob FOR UPDATE da linha tb_user',
+  `created_at` datetime NOT NULL COMMENT 'Instante UTC em que o sistema tomou a vaga da hora (e-mail sai depois do COMMIT)',
+  `updated_at` datetime DEFAULT NULL COMMENT 'Padrao da casa; sem escritor depois do INSERT',
+  `deleted`    char(1)  NOT NULL DEFAULT 'N' COMMENT 'Padrao da casa; sem escritor',
+  PRIMARY KEY (`tb_user_id`, `seq`),
+  CONSTRAINT `fk_user_login_block_notice_to_user` FOREIGN KEY (`tb_user_id`) REFERENCES `tb_user` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_user_login_block_notice_seq` CHECK (`seq` > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='D-EA3: vaga horaria do aviso ao dono de que o login da conta foi bloqueado (1/h por conta)';
+
 -- ---------------------------------------------------------------------
 -- Especializações fiscais da entidade (herança por PK compartilhada — decisão 1)
 -- ---------------------------------------------------------------------
