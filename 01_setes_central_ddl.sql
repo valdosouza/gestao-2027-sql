@@ -81,19 +81,27 @@ CREATE TABLE IF NOT EXISTS `tb_entity_has_mailing` (
 -- ---------------------------------------------------------------------
 -- Autenticação (tb_user controla SOMENTE autenticação — decisão 10)
 -- Senha MD5, sem salt (decisão 2). 1 registro por entity.
+-- Autor da senha (D-UC19/A-UC9 — espelho do script 76): `password_author_role` = o PAPEL de quem definiu a senha vigente (T titular,
+-- A administrador, O operador), gravado pela peça "definir a senha" junto com o hash e o `password_set_at`. NULL = desconhecido
+-- (senha de antes do 76, sem backfill) ou sem senha. Os CHECKs: domínio binário e papel só com senha e com o instante dela.
 -- ---------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS `tb_user` (
   `id`             int(11) NOT NULL,
   `password`       varchar(100) DEFAULT NULL,
   `password_set_at` datetime DEFAULT NULL,  -- D-EA7: instante (UTC) em que a senha atual foi definida — token com iat anterior = revogado
+  `password_author_role` char(1) DEFAULT NULL COMMENT 'D-UC19/A-UC9: papel de quem definiu a senha vigente - T titular, A administrador, O operador, NULL desconhecido ou sem senha',
   `active`         char(1) NOT NULL DEFAULT 'S',
   `activation_key` varchar(255) DEFAULT NULL,
   `created_at`     datetime DEFAULT NULL,
   `updated_at`     datetime DEFAULT NULL,
   `deleted`        char(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`id`),
-  CONSTRAINT `fk_user_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
+  CONSTRAINT `fk_user_to_entity` FOREIGN KEY (`id`) REFERENCES `tb_entity` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_user_password_author_role`         CHECK (`password_author_role` IS NULL
+                                                           OR `password_author_role` COLLATE utf8mb4_bin IN ('T', 'A', 'O')),
+  CONSTRAINT `ck_user_password_author_has_password` CHECK (`password_author_role` IS NULL
+                                                           OR (`password` IS NOT NULL AND `password_set_at` IS NOT NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Pedido de troca de senha (Q-PV38 / D-PV13, 2026-10-18 — espelho do script 67; parecer do guardião): a autorização de uso
