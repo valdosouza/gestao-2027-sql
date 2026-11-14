@@ -376,7 +376,7 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_user` (
   CONSTRAINT `fk_ihu_inviter_to_user` FOREIGN KEY (`tb_user_inviter_id`) REFERENCES `tb_user` (`id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION,
   CONSTRAINT `ck_ihu_inviter_has_invite`  CHECK (`tb_user_inviter_id` IS NULL OR `invited_at` IS NOT NULL),
-  CONSTRAINT `ck_ihu_pending_inactive`    CHECK (NOT (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `invite_withdrawn_at` IS NULL AND `active` = 'S')),
+  CONSTRAINT `ck_ihu_pending_inactive`    CHECK (NOT (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `active` = 'S')),
   CONSTRAINT `ck_ihu_accept_after_invite` CHECK (`accepted_at` IS NULL OR (`invited_at` IS NOT NULL AND `invited_at` <= `accepted_at`)),
   CONSTRAINT `ck_ihu_withdraw_pending`    CHECK (`invite_withdrawn_at` IS NULL
                                                  OR (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `invited_at` <= `invite_withdrawn_at`))

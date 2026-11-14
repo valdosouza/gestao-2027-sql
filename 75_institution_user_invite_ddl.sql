@@ -26,8 +26,8 @@
 --
 -- INVARIANTES no banco (CHECK — o motor confere também as linhas que já existem ao criar o CHECK; vale com ou sem modo estrito):
 --   ck_ihu_inviter_has_invite   quem convidou só existe com o instante do convite
---   ck_ihu_pending_inactive     convite PENDENTE nunca está ativo (rede de segurança contra qualquer escritor que ative sem o aceite —
---                               A-UC8); `active` na colação da coluna (_ci): 's' conta como ativo, como nos leitores
+--   ck_ihu_pending_inactive     convite NUNCA ACEITO (pendente OU retirado) nunca está ativo (rede de segurança contra qualquer
+--                               escritor que ative sem o aceite — A-UC8; gate adversarial do CONV.E2.P6, X3: cobria só o pendente); `active` na colação da coluna (_ci): 's' conta como ativo, como nos leitores
 --   ck_ihu_accept_after_invite  aceito sempre tem convite, e o aceite não vem antes dele
 --   ck_ihu_withdraw_pending     só convite NUNCA aceito é retirado, e a retirada não vem antes do convite
 --   Os escritores de hoje (setes-api, setes-sync, seed 02) não citam as colunas: gravam as quatro vazias e passam nos quatro CHECKs.
@@ -79,7 +79,7 @@ ALTER TABLE `tb_institution_has_user`
   ADD CONSTRAINT IF NOT EXISTS `ck_ihu_inviter_has_invite`
     CHECK (`tb_user_inviter_id` IS NULL OR `invited_at` IS NOT NULL),
   ADD CONSTRAINT IF NOT EXISTS `ck_ihu_pending_inactive`
-    CHECK (NOT (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `invite_withdrawn_at` IS NULL AND `active` = 'S')),
+    CHECK (NOT (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `active` = 'S')),
   ADD CONSTRAINT IF NOT EXISTS `ck_ihu_accept_after_invite`
     CHECK (`accepted_at` IS NULL OR (`invited_at` IS NOT NULL AND `invited_at` <= `accepted_at`)),
   ADD CONSTRAINT IF NOT EXISTS `ck_ihu_withdraw_pending`
