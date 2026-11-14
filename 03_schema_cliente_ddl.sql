@@ -883,21 +883,29 @@ CREATE TABLE IF NOT EXISTS `tb_module_has_interface` (
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- Privilégios do usuário por interface (decisão 18; alimenta GET /api/core/menus
--- e os botões Inserir/Alterar/Excluir — decisão 21).
+-- e os botões Inserir/Alterar/Excluir — decisão 21). POR ESTABELECIMENTO (D-GE3,
+-- migration 076 do setes-api): a institution está na chave — a concessão da matriz
+-- nunca vale na filial do mesmo schema (decisão 10 da Fase 2).
 CREATE TABLE IF NOT EXISTS `tb_user_has_privilege` (
-  `tb_user_id`      INT NOT NULL,
-  `tb_interface_id` INT NOT NULL,
+  `tb_user_id`        INT NOT NULL,
+  `tb_institution_id` INT NOT NULL,
+  `tb_interface_id`   INT NOT NULL,
   `tb_privilege_id` INT NOT NULL,
   `active`          CHAR(1) DEFAULT NULL,
   `created_at`      DATETIME DEFAULT NULL,
   `updated_at`      DATETIME DEFAULT NULL,
   `deleted`         CHAR(1) NOT NULL DEFAULT 'N',
-  PRIMARY KEY (`tb_user_id`,`tb_interface_id`,`tb_privilege_id`),
+  PRIMARY KEY (`tb_user_id`,`tb_institution_id`,`tb_interface_id`,`tb_privilege_id`),
   KEY `idx_uhp_interface` (`tb_interface_id`),
   KEY `idx_uhp_privilege` (`tb_privilege_id`),
+  KEY `idx_uhp_institution` (`tb_institution_id`),
   CONSTRAINT `fk_uhpriv_to_user`
     FOREIGN KEY (`tb_user_id`)
     REFERENCES `setes_central`.`tb_user` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_uhpriv_to_institution`
+    FOREIGN KEY (`tb_institution_id`)
+    REFERENCES `setes_central`.`tb_institution` (`id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION,
   CONSTRAINT `fk_uhpriv_to_interface`
     FOREIGN KEY (`tb_interface_id`)
@@ -1606,7 +1614,7 @@ SELECT i.`tb_institution_id`,
 
 -- =====================================================================
 -- VIEWs do VEREDITO DE ACESSO (costura A1 da frente auth-api — D-AU3/D-AU6/D-AU8, 2026-10-31; espelho da migration
--- 075 do setes-api). Leem as views CENTRAIS do script 70 (setes_central.vw_user_link e vw_interface_catalog) — aplicar
+-- 075 do setes-api; a vw_user_access com a concessão POR ESTABELECIMENTO da 076 — D-GE3). Leem as views CENTRAIS do script 70 (setes_central.vw_user_link e vw_interface_catalog) — aplicar
 -- o 70 ANTES. Presença = permissão; o único leitor é a biblioteca `fiscal-api/access`. Rodar com `SET NAMES utf8mb4`.
 -- =====================================================================
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW `vw_user_reach` AS
@@ -1643,6 +1651,7 @@ SELECT r.`tb_user_id`,
    AND CHAR_LENGTH(p.`description`) = CHAR_LENGTH(RTRIM(p.`description`))
   LEFT JOIN `tb_user_has_privilege` g
     ON g.`tb_user_id` = r.`tb_user_id`
+   AND g.`tb_institution_id` = r.`tb_institution_id`
    AND g.`tb_interface_id` = ihp.`tb_interface_id`
    AND g.`tb_privilege_id` = ihp.`tb_privilege_id`
    AND g.`active` = 'S' AND g.`deleted` = 'N'
