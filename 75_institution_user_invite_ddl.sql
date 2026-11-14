@@ -75,6 +75,9 @@ EXECUTE sql75_ddl;
 DEALLOCATE PREPARE sql75_ddl;
 
 -- (3) as invariantes (o ADD CONSTRAINT confere as linhas existentes e falha alto se alguma violar)
+-- O CHECK do pendente é TROCADO a cada execução (DROP + ADD): a 1ª versão deste script recusava só o pendente ativo e, com o ADD … IF NOT
+-- EXISTS, uma reexecução a manteria (re-gate adversarial do CONV.E2.P6, D3a); o boot do setes-api também confere o corpo
+ALTER TABLE `tb_institution_has_user` DROP CONSTRAINT IF EXISTS `ck_ihu_pending_inactive`;
 ALTER TABLE `tb_institution_has_user`
   ADD CONSTRAINT IF NOT EXISTS `ck_ihu_inviter_has_invite`
     CHECK (`tb_user_inviter_id` IS NULL OR `invited_at` IS NOT NULL),
