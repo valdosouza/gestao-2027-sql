@@ -352,18 +352,34 @@ CREATE TABLE IF NOT EXISTS `tb_institution` (
 
 -- `kind` = perfil do usuário NAQUELA institution (decisão 10).
 -- 'super' só vale na institution 1 / Setes — hard coded no backend (decisão 14).
+-- Convite, aceite e retirada (D-UC10/D-UC12/D-UC14/D-UC15 — espelho do script 75): aguardando aceite = convite (`invited_at`)
+-- preenchido, sem aceite e sem retirada (o LOGIN do titular o ativa); vínculo sem convite (anterior ou do setes-sync) = as quatro
+-- colunas vazias, e o login nunca o ativa. Os CHECKs: quem convidou só com convite; convite pendente nunca ativo; aceite só com convite
+-- e não antes dele; retirada só de convite nunca aceito e não antes dele.
 CREATE TABLE IF NOT EXISTS `tb_institution_has_user` (
-  `tb_institution_id` int(11) NOT NULL,
-  `tb_user_id`        int(11) NOT NULL,
-  `kind`              varchar(20) DEFAULT NULL,
-  `active`            char(1) DEFAULT NULL,
-  `created_at`        datetime DEFAULT NULL,
-  `updated_at`        datetime DEFAULT NULL,
-  `deleted`           char(1) NOT NULL DEFAULT 'N',
+  `tb_institution_id`   int(11) NOT NULL,
+  `tb_user_id`          int(11) NOT NULL,
+  `kind`                varchar(20) DEFAULT NULL,
+  `active`              char(1) DEFAULT NULL,
+  `tb_user_inviter_id`  int(11) DEFAULT NULL COMMENT 'D-UC10: usuario cujo ato criou ou interceptou o vinculo - NULL = sem convite ou sem autor',
+  `invited_at`          datetime DEFAULT NULL COMMENT 'D-UC14: instante UTC do convite - NULL = vinculo sem convite (anterior ou do setes-sync)',
+  `accepted_at`         datetime DEFAULT NULL COMMENT 'D-UC10/D-UC12: instante UTC do aceite (login do titular), gravado uma vez',
+  `invite_withdrawn_at` datetime DEFAULT NULL COMMENT 'D-UC15: instante UTC em que o admin retirou o convite ainda nao aceito',
+  `created_at`          datetime DEFAULT NULL,
+  `updated_at`          datetime DEFAULT NULL,
+  `deleted`             char(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`tb_institution_id`,`tb_user_id`),
   KEY `tb_user_id` (`tb_user_id`),
-  CONSTRAINT `fk_ihu_to_institution` FOREIGN KEY (`tb_institution_id`) REFERENCES `tb_institution` (`id`),
-  CONSTRAINT `fk_ihu_to_user`        FOREIGN KEY (`tb_user_id`)        REFERENCES `tb_user` (`id`)
+  KEY `idx_ihu_inviter` (`tb_user_inviter_id`),
+  CONSTRAINT `fk_ihu_to_institution`  FOREIGN KEY (`tb_institution_id`)  REFERENCES `tb_institution` (`id`),
+  CONSTRAINT `fk_ihu_to_user`         FOREIGN KEY (`tb_user_id`)         REFERENCES `tb_user` (`id`),
+  CONSTRAINT `fk_ihu_inviter_to_user` FOREIGN KEY (`tb_user_inviter_id`) REFERENCES `tb_user` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_ihu_inviter_has_invite`  CHECK (`tb_user_inviter_id` IS NULL OR `invited_at` IS NOT NULL),
+  CONSTRAINT `ck_ihu_pending_inactive`    CHECK (NOT (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `invite_withdrawn_at` IS NULL AND `active` = 'S')),
+  CONSTRAINT `ck_ihu_accept_after_invite` CHECK (`accepted_at` IS NULL OR (`invited_at` IS NOT NULL AND `invited_at` <= `accepted_at`)),
+  CONSTRAINT `ck_ihu_withdraw_pending`    CHECK (`invite_withdrawn_at` IS NULL
+                                                 OR (`invited_at` IS NOT NULL AND `accepted_at` IS NULL AND `invited_at` <= `invite_withdrawn_at`))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
