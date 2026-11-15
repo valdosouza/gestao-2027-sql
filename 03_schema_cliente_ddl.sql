@@ -442,7 +442,7 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
     REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
--- D-IB101/D-IB103 (migration 076 do setes-api): a última nota viva emitida pelo ERP web (evento E) — fronteira da opção de apuração do
+-- D-IB101/D-IB103 (migration 077 do setes-api): a última nota viva emitida pelo ERP web (evento E) — fronteira da opção de apuração do
 -- IBS/CBS — em O(1) linhas lidas
 ALTER TABLE `tb_invoice_event`
   ADD KEY IF NOT EXISTS `idx_invoice_event_issue` (`tb_institution_id`, `kind`, `deleted`, `dt_record`);
@@ -820,7 +820,7 @@ CREATE TABLE IF NOT EXISTS `tb_entity_tax` (
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- =====================================================================
--- Fase IBS/CBS, D-IB99/D-IB100 (migration 076 do setes-api — prompt_fase_ibs_cbs.md §14):
+-- Fase IBS/CBS, D-IB99/D-IB100 (migration 077 do setes-api — prompt_fase_ibs_cbs.md §14):
 -- OPÇÃO de apuração do IBS/CBS do Simples (regApIBSCBSSN da NT 009), DATADA por
 -- estabelecimento. Peça própria (fato gerador = opção CGSN 194, semestral); o resto
 -- do enquadramento do emitente segue em tb_entity_tax. Sem linha = 1 (D-IB1, sem

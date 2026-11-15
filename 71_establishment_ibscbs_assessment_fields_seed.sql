@@ -5,7 +5,7 @@
 -- prompt_fase_ibs_cbs.md §14; motor de campos na própria frente — D-CF4 de
 -- prompt_frente_campos_todas_telas.md). O resto da tela (cadeia de entidade,
 -- regime em tb_entity_tax) entra na onda da D-CF4 (bloco C).
--- Tabela: tb_establishment_ibscbs_assessment (migration 076 do setes-api).
+-- Tabela: tb_establishment_ibscbs_assessment (migration 077 do setes-api).
 --   - id da interface DINÂMICO (por i18n_key — lição do seed 40);
 --   - FORA: tb_institution_id (escopo do JWT), tb_user_id (autoria);
 --   - baseline técnico 'S' nos dois: o DTO do sub-recurso
