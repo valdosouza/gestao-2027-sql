@@ -442,6 +442,10 @@ CREATE TABLE IF NOT EXISTS `tb_invoice_event` (
     REFERENCES `tb_invoice` (`id`, `tb_institution_id`, `terminal`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- D-IB101/D-IB103 (migration 076 do setes-api): a última nota viva emitida pelo ERP web (evento E) — fronteira da opção de apuração do
+-- IBS/CBS — em O(1) linhas lidas
+ALTER TABLE `tb_invoice_event`
+  ADD KEY IF NOT EXISTS `idx_invoice_event_issue` (`tb_institution_id`, `kind`, `deleted`, `dt_record`);
 
 -- Ramo de SERVIÇO da nota (migration 020 = mínimo; 058 = colunas congeladas no
 -- faturamento — um DPS declara UM serviço, D-N2; emitente/tomador ficam só no XML)
@@ -813,6 +817,30 @@ CREATE TABLE IF NOT EXISTS `tb_entity_tax` (
     FOREIGN KEY (`tb_institution_id`)
     REFERENCES `setes_central`.`tb_institution` (`id`)
     ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- =====================================================================
+-- Fase IBS/CBS, D-IB99/D-IB100 (migration 076 do setes-api — prompt_fase_ibs_cbs.md §14):
+-- OPÇÃO de apuração do IBS/CBS do Simples (regApIBSCBSSN da NT 009), DATADA por
+-- estabelecimento. Peça própria (fato gerador = opção CGSN 194, semestral); o resto
+-- do enquadramento do emitente segue em tb_entity_tax. Sem linha = 1 (D-IB1, sem
+-- backfill); sem valid_until (a linha seguinte fecha a anterior); só linha FUTURA
+-- muda — regra na peça @shared/ibscbs-assessment.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS `tb_establishment_ibscbs_assessment` (
+  `tb_institution_id` INT NOT NULL,
+  `valid_from`        DATE NOT NULL,          -- data de efeito da opção (competência a partir da qual vale)
+  `assessment`        CHAR(1) NOT NULL,       -- 1 IBS e CBS pelo SN · 2 CBS pelo SN e IBS pelo regular · 3 ambos pelo regular
+  `tb_user_id`        INT NOT NULL,           -- quem registrou a opção
+  `created_at`        DATETIME DEFAULT NULL,
+  `updated_at`        DATETIME DEFAULT NULL,
+  `deleted`           CHAR(1) NOT NULL DEFAULT 'N',
+  PRIMARY KEY (`tb_institution_id`, `valid_from`),
+  CONSTRAINT `fk_establishment_ibscbs_assessment_institution`
+    FOREIGN KEY (`tb_institution_id`)
+    REFERENCES `setes_central`.`tb_institution` (`id`)
+    ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `ck_establishment_ibscbs_assessment` CHECK (`assessment` COLLATE utf8mb4_bin IN ('1', '2', '3'))
 ) ENGINE=InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- =====================================================================
