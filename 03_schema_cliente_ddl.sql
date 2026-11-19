@@ -1686,3 +1686,16 @@ SELECT r.`tb_user_id`,
  WHERE r.`profile` = 'super'
     OR (r.`profile` = 'admin' AND r.`delegable` = 'N')
     OR g.`tb_user_id` IS NOT NULL;
+
+-- =====================================================================
+-- VIEW da OPÇÃO de apuração do IBS/CBS do Simples (espelho da migration 078 do setes-api — D-IB127/D-IB128/D-IB129,
+-- Infra-IA/prompts/prompt_fase_ibs_cbs.md §17). Só as linhas VIVAS de tb_establishment_ibscbs_assessment, sem resolver a
+-- vigente (o seletor único é `ibscbsAssessmentOf`, do subpath `fiscal-api/ibscbs-assessment`); contrato das colunas no mesmo
+-- subpath. SELECT simples, fundível (PADROES_BANCO §11 regra 3). Rodar com SET NAMES utf8mb4, como o bloco acima.
+-- =====================================================================
+CREATE OR REPLACE VIEW `vw_establishment_ibscbs_assessment` AS
+SELECT a.`tb_institution_id`,
+       a.`valid_from`,
+       a.`assessment`
+  FROM `tb_establishment_ibscbs_assessment` a
+ WHERE a.`deleted` = 'N';
