@@ -396,17 +396,22 @@ CREATE TABLE IF NOT EXISTS `tb_institution_has_user` (
 
 CREATE TABLE IF NOT EXISTS `tb_privilege` (
   `id`          int(11) NOT NULL,
-  `description` varchar(100) DEFAULT NULL,
+  `description` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,   -- a colação É a regra do UNIQUE (77)
   `created_at`  datetime DEFAULT NULL,
   `updated_at`  datetime DEFAULT NULL,
   `deleted`     char(1) NOT NULL DEFAULT 'N',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  -- script 77 (D-PV63/A-PV28): o nome do verbo é ÚNICO em TODAS as linhas, excluídas inclusive — nome e id 1:1 (seeds por id fixo,
+  -- app e view pelo nome exato). Proibido ON DUPLICATE KEY UPDATE e REPLACE INTO nesta tabela (PADROES §9 regra 10, §3.1).
+  UNIQUE KEY `uq_privilege_description` (`description`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `tb_interface` (
   `id`            int(11) NOT NULL,
   `group_default` varchar(100) DEFAULT NULL,
-  `i18n_key`      varchar(100) DEFAULT NULL,  -- chave de tradução no app (setes-app decisão 26); NULL = mostra description
+  -- chave de tradução no app (setes-app decisão 26); NULL = mostra description. A colação É a regra do UNIQUE (script 77) — explícita:
+  -- um servidor com outro padrão de utf8mb4 (MySQL 8, MariaDB 11) faria o boot recusar subir (re-gate do PRIV.E7.P1, L4)
+  `i18n_key`      varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `description`   varchar(100) DEFAULT NULL,
   -- Framework de Configurações (decisão 13): 'T' = tela (vai a menu);
   -- 'R' = recurso/aba vendável (NUNCA vai a menu — a tela pai consulta o
@@ -418,7 +423,13 @@ CREATE TABLE IF NOT EXISTS `tb_interface` (
   `created_at`    datetime DEFAULT NULL,
   `updated_at`    datetime DEFAULT NULL,
   `deleted`       char(1) NOT NULL DEFAULT 'N',
+  -- script 77 (D-PV43): a chave entre as VIVAS (NULL nas excluídas) — base do UNIQUE; a excluída não colide ("estacionar" a libera).
+  -- Proibido ON DUPLICATE KEY UPDATE e REPLACE INTO nesta tabela (PADROES §9 regra 10, §3.1); seed novo: o NOT EXISTS olha TODAS as
+  -- linhas da chave, excluídas inclusive (A-PV28: a volta revive a MESMA linha, nunca id novo).
+  `i18n_key_live` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+    GENERATED ALWAYS AS (CASE WHEN `deleted` = 'N' THEN `i18n_key` END) STORED,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_interface_i18n_key_live` (`i18n_key_live`),
   KEY `position` (`position`),
   KEY `kind` (`kind`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
